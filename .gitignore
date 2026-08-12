@@ -1,0 +1,15 @@
+# Go
+/agent/kepler-agent
+/agent/*.exe
+/agent/**/*.test
+
+# Editors / OS
+.DS_Store
+.idea/
+*.swp
+
+# Env / secrets
+.env
+.env.*
+*.pem
+*.key
