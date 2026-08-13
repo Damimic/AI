@@ -15,8 +15,9 @@ dashboard with severity scoring and alerting.
 - [`backend/`](backend/) — findings ingestion API + Postgres store.
   API-key-authenticated `POST /v1/findings`. No dashboard/query endpoints
   yet.
-- [`web/`](web/) — not started yet. Will provide the findings dashboard and
-  the marketing/waitlist landing page.
+- [`web/`](web/) — findings dashboard (Basic-Auth-protected, filterable by
+  host/severity). The marketing/waitlist landing page hasn't been built
+  yet.
 
 ## Status
 
