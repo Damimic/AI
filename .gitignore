@@ -2,6 +2,12 @@
 /agent/kepler-agent
 /agent/*.exe
 /agent/**/*.test
+/backend/kepler-backend
+/backend/kepler-backend-admin
+/backend/**/*.test
+
+# Local dev TLS cert/key (regenerate with backend/scripts/gen-dev-cert.sh)
+/backend/dev-certs/
 
 # Editors / OS
 .DS_Store
