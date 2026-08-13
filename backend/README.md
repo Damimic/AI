@@ -75,9 +75,21 @@ default.
 
 Store and API tests run against a real local Postgres, not a mock — for a
 security product, the actual SQL and the actual auth-rejection paths are
-what need verifying. Set `KEPLER_TEST_DB_URL` to the same connection string
-as above; tests skip cleanly if it isn't set.
+what need verifying. Tests skip cleanly if `KEPLER_TEST_DB_URL` isn't set.
 
+**Point this at a dedicated `kepler_test` database, not the `kepler` dev
+database above.** Tests insert real, permanent rows and don't clean up
+after themselves (they rely on random suffixes to avoid collisions between
+runs, not transaction rollback) — pointed at your dev database, every test
+run permanently pollutes whatever you're looking at in the dashboard.
+
+One-time setup:
 ```
-KEPLER_TEST_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler" go test ./...
+docker compose exec -T postgres psql -U kepler -d kepler -c "CREATE DATABASE kepler_test;"
+docker compose exec -T postgres psql -U kepler -d kepler_test -f - < db/schema.sql
+```
+
+Then:
+```
+KEPLER_TEST_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler_test" go test ./...
 ```

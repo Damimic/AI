@@ -93,8 +93,27 @@ Needs findings in the database already (see `backend/README.md`).
 Same convention as `backend`: tests run against real local databases,
 skipped cleanly if the relevant env var isn't set.
 
+**Point these at dedicated `kepler_test` / `kepler_marketing_test`
+databases, not the dev databases above** — tests don't clean up after
+themselves, so running them against your dev databases permanently
+pollutes whatever you're looking at in the dashboard or waitlist table.
+
+One-time setup:
 ```
-KEPLER_TEST_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler" \
-KEPLER_TEST_MARKETING_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler_marketing" \
+docker compose -f ../backend/docker-compose.yml exec -T postgres \
+  psql -U kepler -d kepler -c "CREATE DATABASE kepler_test;"
+docker compose -f ../backend/docker-compose.yml exec -T postgres \
+  psql -U kepler -d kepler_test -f - < ../backend/db/schema.sql
+
+docker compose -f ../backend/docker-compose.yml exec -T postgres \
+  psql -U kepler -d kepler -c "CREATE DATABASE kepler_marketing_test;"
+docker compose -f ../backend/docker-compose.yml exec -T postgres \
+  psql -U kepler -d kepler_marketing_test -f - < db/waitlist_schema.sql
+```
+
+Then:
+```
+KEPLER_TEST_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler_test" \
+KEPLER_TEST_MARKETING_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler_marketing_test" \
 go test ./...
 ```
