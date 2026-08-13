@@ -19,16 +19,22 @@ dashboard with severity scoring and alerting.
   host/severity) and the marketing/waitlist landing page. Two independent
   services with separate databases — a compromised public signup form has
   no path to findings data.
+- [`integration/`](integration/) — one end-to-end test that drives the real
+  `kepler-backend` and `kepler-web` binaries as subprocesses over real
+  HTTPS: ingests a findings payload with a real API key, then confirms it
+  renders on the dashboard. Proves the seam between services, not just each
+  one in isolation.
 
 ## Status
 
 v1's core technical scope is built: agent → CVE matching → backend →
 dashboard, plus the marketing/waitlist site, all verified working
 end-to-end against real data. CI (`.github/workflows/ci.yml`) builds,
-vets, and runs the test suite for all three modules — including the
-Postgres-backed store/API tests — on every push and pull request. No AI
-assistant, compliance reporting, audit log, billing, or multi-OS support
-yet — see the project brief for full scope.
+vets, and runs the test suite for all three modules plus the end-to-end
+integration test — including the Postgres-backed store/API tests — on
+every push and pull request. No AI assistant, compliance reporting, audit
+log, billing, or multi-OS support yet — see the project brief for full
+scope.
 
 ## Security principles
 

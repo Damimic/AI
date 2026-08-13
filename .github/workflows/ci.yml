@@ -93,3 +93,34 @@ jobs:
         env:
           KEPLER_TEST_DB_URL: postgres://kepler:kepler_dev_only@localhost:5432/kepler
           KEPLER_TEST_MARKETING_DB_URL: postgres://kepler:kepler_dev_only@localhost:5432/kepler_marketing
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [backend, web]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kepler
+          POSTGRES_PASSWORD: kepler_dev_only
+          POSTGRES_DB: kepler
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: integration/go.mod
+      - run: go build ./...
+        working-directory: integration
+      - run: go vet ./...
+        working-directory: integration
+      - run: go test -v ./...
+        working-directory: integration
+        env:
+          KEPLER_TEST_DB_URL: postgres://kepler:kepler_dev_only@localhost:5432/kepler
