@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kepler — Know what's vulnerable before an attacker does</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0; color: #1a1a1a; line-height: 1.5; background: #fff;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem; }
+  header h1 { font-size: 1.4rem; margin: 0 0 3rem 0; letter-spacing: -0.01em; }
+  .hero h2 { font-size: 2rem; margin: 0 0 0.75rem 0; letter-spacing: -0.02em; }
+  .hero p.lede { font-size: 1.1rem; color: #444; margin: 0 0 2.5rem 0; max-width: 42ch; }
+  section { margin-bottom: 3rem; }
+  h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: #777; margin: 0 0 1rem 0; }
+  .principles { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
+  .principles li { padding-left: 1.4rem; position: relative; }
+  .principles li::before { content: "—"; position: absolute; left: 0; color: #999; }
+  .principles strong { display: block; }
+  .principles span { color: #555; font-size: 0.95rem; }
+  form.waitlist { display: flex; gap: 0.5rem; flex-wrap: wrap; max-width: 420px; }
+  form.waitlist input[type=email] {
+    flex: 1 1 240px; padding: 0.65rem 0.8rem; font-size: 1rem;
+    border: 1px solid #ccc; border-radius: 6px;
+  }
+  form.waitlist button {
+    padding: 0.65rem 1.2rem; font-size: 1rem; background: #1a1a1a; color: #fff;
+    border: none; border-radius: 6px; cursor: pointer;
+  }
+  form.waitlist button:hover { background: #333; }
+  .honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  .banner { padding: 0.8rem 1rem; border-radius: 6px; margin-bottom: 1.25rem; font-size: 0.95rem; max-width: 420px; }
+  .banner.success { background: #e8f5e9; color: #1b5e20; }
+  .banner.duplicate { background: #fff8e1; color: #6d4c00; }
+  .banner.invalid { background: #fdecea; color: #7a0000; }
+  footer { color: #999; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header><h1>Kepler</h1></header>
+
+<div class="hero">
+  <h2>Know what's vulnerable before an attacker does.</h2>
+  <p class="lede">Vulnerability scanning for SMBs and compliance-conscious teams — a lightweight agent scans your infrastructure locally, matches against real CVE data, and shows you exactly what's exposed.</p>
+</div>
+
+<section>
+  <h3>What it does</h3>
+  <p>A small agent installs on your Linux infrastructure and collects package versions, OS/kernel info, running services, and open ports — locally, with read-only access. That data is matched against real vulnerability data (NVD/OSV-sourced) and reported over an authenticated, encrypted connection to a dashboard listing exactly what's exploitable, by host and severity. No noise, no guessing.</p>
+</section>
+
+<section>
+  <h3>Why it's different</h3>
+  <ul class="principles">
+    <li><strong>Read-only by design.</strong> <span>The agent never needs write access to your systems — it only ever reads what's already there.</span></li>
+    <li><strong>Encrypted, always.</strong> <span>Data in transit and at rest, from the first line of code, not bolted on before launch.</span></li>
+    <li><strong>Minimal by default.</strong> <span>Package names and versions, not file contents or data dumps. We collect what's needed to find vulnerabilities, nothing more.</span></li>
+    <li><strong>Security as the product, not an afterthought.</strong> <span>A vulnerability scanner that gets breached is worse than no scanner at all — so authentication and access control are first-class from day one.</span></li>
+  </ul>
+</section>
+
+<section>
+  <h3>Get early access</h3>
+
+  {{if eq .Status "success"}}
+  <div class="banner success">You're on the list — we'll be in touch.</div>
+  {{else if eq .Status "duplicate"}}
+  <div class="banner duplicate">That email's already on the list.</div>
+  {{else if eq .Status "invalid"}}
+  <div class="banner invalid">That doesn't look like a valid email address — try again.</div>
+  {{end}}
+
+  <form class="waitlist" method="post" action="/waitlist">
+    <input type="email" name="email" placeholder="you@company.com" required>
+    <input class="honeypot" type="text" name="company_website" tabindex="-1" autocomplete="off">
+    <button type="submit">Join the waitlist</button>
+  </form>
+</section>
+
+<footer>Kepler is in early development.</footer>
+
+</div>
+</body>
+</html>
