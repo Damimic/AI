@@ -47,7 +47,11 @@ func Waitlist(st *waitlist.Store) http.HandlerFunc {
 			return
 		}
 
-		email := strings.TrimSpace(r.FormValue("email"))
+		// Lowercased so the same address in different casing (e.g.
+		// mobile autocapitalization) dedupes against itself instead of
+		// silently bypassing the unique-email constraint and
+		// ErrAlreadySignedUp check below.
+		email := strings.ToLower(strings.TrimSpace(r.FormValue("email")))
 		if _, err := mail.ParseAddress(email); err != nil {
 			http.Redirect(w, r, "/?status=invalid", http.StatusSeeOther)
 			return

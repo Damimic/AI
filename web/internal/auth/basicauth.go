@@ -21,11 +21,15 @@ import (
 func RequireBasicAuth(username, passwordHash string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
-		if !ok || subtle.ConstantTimeCompare([]byte(user), []byte(username)) != 1 {
-			unauthorized(w)
-			return
-		}
-		if bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(pass)) != nil {
+
+		// bcrypt always runs when credentials are present, regardless of
+		// whether the username matches — a short-circuit on username
+		// alone would skip bcrypt's ~50-100ms and let a timing
+		// difference reveal whether the guessed username is correct.
+		passOK := ok && bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(pass)) == nil
+		userOK := ok && subtle.ConstantTimeCompare([]byte(user), []byte(username)) == 1
+
+		if !userOK || !passOK {
 			unauthorized(w)
 			return
 		}

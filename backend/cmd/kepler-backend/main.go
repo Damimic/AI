@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"kepler/backend/internal/api"
 	"kepler/backend/internal/store"
@@ -48,15 +49,27 @@ func run() error {
 	keyFile := os.Getenv("KEPLER_TLS_KEY")
 	insecure := os.Getenv("KEPLER_INSECURE_HTTP") == "true"
 
+	// Explicit timeouts, not the http.Server zero-value defaults (none) —
+	// a slow or idle client shouldn't be able to hold a connection open
+	// indefinitely and exhaust server connection slots.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
 	if certFile == "" || keyFile == "" {
 		if !insecure {
 			return fmt.Errorf("KEPLER_TLS_CERT and KEPLER_TLS_KEY are required; findings are security-sensitive data and this refuses to serve plaintext HTTP by default. Set KEPLER_INSECURE_HTTP=true to override for local development only")
 		}
 		log.Println("WARNING: KEPLER_INSECURE_HTTP=true — serving plaintext HTTP. Never use this outside local development.")
 		log.Printf("kepler-backend listening on %s (HTTP, insecure)", addr)
-		return http.ListenAndServe(addr, handler)
+		return srv.ListenAndServe()
 	}
 
 	log.Printf("kepler-backend listening on %s (HTTPS)", addr)
-	return http.ListenAndServeTLS(addr, certFile, keyFile, handler)
+	return srv.ListenAndServeTLS(certFile, keyFile)
 }
