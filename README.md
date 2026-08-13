@@ -24,9 +24,11 @@ dashboard with severity scoring and alerting.
 
 v1's core technical scope is built: agent → CVE matching → backend →
 dashboard, plus the marketing/waitlist site, all verified working
-end-to-end against real data. No AI assistant, compliance reporting, audit
-log, billing, or multi-OS support yet — see the project brief for full
-scope.
+end-to-end against real data. CI (`.github/workflows/ci.yml`) builds,
+vets, and runs the test suite for all three modules — including the
+Postgres-backed store/API tests — on every push and pull request. No AI
+assistant, compliance reporting, audit log, billing, or multi-OS support
+yet — see the project brief for full scope.
 
 ## Security principles
 

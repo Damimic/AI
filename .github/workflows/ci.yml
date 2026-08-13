@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+      - run: go build ./...
+        working-directory: agent
+      - run: go vet ./...
+        working-directory: agent
+      - run: go test ./...
+        working-directory: agent
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kepler
+          POSTGRES_PASSWORD: kepler_dev_only
+          POSTGRES_DB: kepler
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Apply schema
+        run: PGPASSWORD=kepler_dev_only psql -h localhost -U kepler -d kepler -f db/schema.sql
+        working-directory: backend
+      - run: go build ./...
+        working-directory: backend
+      - run: go vet ./...
+        working-directory: backend
+      - run: go test ./...
+        working-directory: backend
+        env:
+          KEPLER_TEST_DB_URL: postgres://kepler:kepler_dev_only@localhost:5432/kepler
+
+  web:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kepler
+          POSTGRES_PASSWORD: kepler_dev_only
+          POSTGRES_DB: kepler
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: web/go.mod
+      - name: Install psql
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Apply findings schema
+        run: PGPASSWORD=kepler_dev_only psql -h localhost -U kepler -d kepler -f backend/db/schema.sql
+      - name: Create and apply marketing schema
+        run: |
+          PGPASSWORD=kepler_dev_only psql -h localhost -U kepler -d kepler -c "CREATE DATABASE kepler_marketing;"
+          PGPASSWORD=kepler_dev_only psql -h localhost -U kepler -d kepler_marketing -f web/db/waitlist_schema.sql
+      - run: go build ./...
+        working-directory: web
+      - run: go vet ./...
+        working-directory: web
+      - run: go test ./...
+        working-directory: web
+        env:
+          KEPLER_TEST_DB_URL: postgres://kepler:kepler_dev_only@localhost:5432/kepler
+          KEPLER_TEST_MARKETING_DB_URL: postgres://kepler:kepler_dev_only@localhost:5432/kepler_marketing
