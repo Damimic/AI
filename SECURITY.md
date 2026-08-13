@@ -60,6 +60,11 @@ credentials are only as safe as the transport carrying them.
 ## What's already enforced, not just documented
 
 - `kepler-agent` runs read-only against scanned hosts — no write access.
+- `kepler-agent` needs no elevated privileges to run — every collector is
+  a read-only query against something already world-readable (`dpkg-query`,
+  `systemctl list-units`, `/proc/net/*`, `/etc/os-release`). See
+  [`agent/README.md`](agent/README.md) for the deployment pattern (a
+  dedicated non-root systemd user) that actually puts this into practice.
 - Both `kepler-backend` and `kepler-web` refuse to start over plaintext
   HTTP unless `KEPLER_INSECURE_HTTP=true` is set explicitly.
 - All SQL is parameterized (no string-built queries) across every
