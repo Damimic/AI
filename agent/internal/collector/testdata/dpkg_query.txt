@@ -1,4 +1,4 @@
-adduser	3.118ubuntu5	all	install ok installed
-zlib1g	1:1.2.11.dfsg-2ubuntu9.2	amd64	install ok installed
-openssl	3.0.2-0ubuntu1.15	amd64	install ok installed
-oldpkg	1.0-1	amd64	deinstall ok config-files
+adduser	3.118ubuntu5	all	adduser	3.118ubuntu5	install ok installed
+zlib1g	1:1.2.11.dfsg-2ubuntu9.2	amd64	zlib	1:1.2.11.dfsg-2ubuntu9.2	install ok installed
+libssl3	3.0.2-0ubuntu1.15	amd64	openssl	3.0.2-0ubuntu1.15	install ok installed
+oldpkg	1.0-1	amd64	oldpkg	1.0-1	deinstall ok config-files

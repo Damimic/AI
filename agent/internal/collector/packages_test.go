@@ -20,9 +20,9 @@ func TestParseDpkgQuery(t *testing.T) {
 	}
 
 	want := []model.Package{
-		{Name: "adduser", Version: "3.118ubuntu5", Architecture: "all", Source: "dpkg"},
-		{Name: "zlib1g", Version: "1:1.2.11.dfsg-2ubuntu9.2", Architecture: "amd64", Source: "dpkg"},
-		{Name: "openssl", Version: "3.0.2-0ubuntu1.15", Architecture: "amd64", Source: "dpkg"},
+		{Name: "adduser", Version: "3.118ubuntu5", Architecture: "all", Source: "dpkg", SourcePackage: "adduser", SourceVersion: "3.118ubuntu5"},
+		{Name: "zlib1g", Version: "1:1.2.11.dfsg-2ubuntu9.2", Architecture: "amd64", Source: "dpkg", SourcePackage: "zlib", SourceVersion: "1:1.2.11.dfsg-2ubuntu9.2"},
+		{Name: "libssl3", Version: "3.0.2-0ubuntu1.15", Architecture: "amd64", Source: "dpkg", SourcePackage: "openssl", SourceVersion: "3.0.2-0ubuntu1.15"},
 	}
 
 	if len(got) != len(want) {

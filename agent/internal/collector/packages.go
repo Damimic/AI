@@ -14,7 +14,7 @@ import (
 // dpkgQueryFormat uses literal backslash-t / backslash-n escapes, which
 // dpkg-query itself interprets and converts to real tabs/newlines in its
 // output — this is dpkg-query's own format syntax, not a Go string escape.
-const dpkgQueryFormat = `${Package}\t${Version}\t${Architecture}\t${Status}\n`
+const dpkgQueryFormat = `${Package}\t${Version}\t${Architecture}\t${source:Package}\t${source:Version}\t${Status}\n`
 
 // CollectPackages returns installed packages as reported by dpkg. It shells
 // out to dpkg-query, a read-only query against the local package database —
@@ -41,18 +41,21 @@ func parseDpkgQuery(r io.Reader) ([]model.Package, error) {
 			continue
 		}
 		fields := strings.Split(line, "\t")
-		if len(fields) != 4 {
+		if len(fields) != 6 {
 			continue
 		}
-		name, version, arch, status := fields[0], fields[1], fields[2], fields[3]
+		name, version, arch := fields[0], fields[1], fields[2]
+		srcName, srcVersion, status := fields[3], fields[4], fields[5]
 		if status != "install ok installed" {
 			continue
 		}
 		pkgs = append(pkgs, model.Package{
-			Name:         name,
-			Version:      version,
-			Architecture: arch,
-			Source:       "dpkg",
+			Name:          name,
+			Version:       version,
+			Architecture:  arch,
+			Source:        "dpkg",
+			SourcePackage: srcName,
+			SourceVersion: srcVersion,
 		})
 	}
 	return pkgs, scanner.Err()

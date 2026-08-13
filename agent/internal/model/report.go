@@ -29,6 +29,15 @@ type Package struct {
 	Version      string `json:"version"`
 	Architecture string `json:"architecture,omitempty"`
 	Source       string `json:"source"` // package manager that reported it, e.g. "dpkg"
+
+	// SourcePackage and SourceVersion identify the source package this
+	// binary package was built from (e.g. binary "libssl3" comes from
+	// source "openssl"). Distro CVE advisories are keyed by source package
+	// name, not binary package name, so this is required for accurate CVE
+	// matching. dpkg defaults both to the binary package's own name/version
+	// when a package has no separate source package.
+	SourcePackage string `json:"source_package"`
+	SourceVersion string `json:"source_version"`
 }
 
 // Service is a systemd service the collector observed as active.
