@@ -16,23 +16,30 @@ dashboard with severity scoring and alerting.
   API-key-authenticated `POST /v1/findings`. No dashboard/query endpoints
   yet.
 - [`web/`](web/) — findings dashboard (Basic-Auth-protected, filterable by
-  host/severity). The marketing/waitlist landing page hasn't been built
-  yet.
+  host/severity) and the marketing/waitlist landing page. Two independent
+  services with separate databases — a compromised public signup form has
+  no path to findings data.
 
 ## Status
 
-v1 is in progress. See the project brief for full scope — in short: Linux-only
-agent, CVE matching via an existing engine (not built from scratch), a minimal
-authenticated backend, and a plain findings dashboard. No AI assistant,
-compliance reporting, audit log, billing, or multi-OS support yet.
+v1's core technical scope is built: agent → CVE matching → backend →
+dashboard, plus the marketing/waitlist site, all verified working
+end-to-end against real data. No AI assistant, compliance reporting, audit
+log, billing, or multi-OS support yet — see the project brief for full
+scope.
 
 ## Security principles
 
-These apply from the first line of code, not added later:
+These apply from the first line of code, not added later. See
+[SECURITY.md](SECURITY.md) for the reasoning behind specific tradeoffs
+(API-key vs mTLS, dashboard auth, encryption at rest).
 
 - The agent only ever needs read access to scanned systems, never write
   access to production.
-- Data is encrypted in transit (TLS) and at rest.
+- Data is encrypted in transit (TLS, enforced by default on every service).
+  Encryption at rest applies once real infrastructure exists — see
+  SECURITY.md for why that's a deployment-layer decision, not something
+  local dev can meaningfully implement yet.
 - Collection is minimal: package name/version and config state only, never
   full file contents or sensitive data dumps.
 - Agent↔backend auth and backend access control are first-class design

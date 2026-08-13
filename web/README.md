@@ -1,36 +1,57 @@
 # web
 
-Findings dashboard: a single Basic-Auth-protected page listing findings,
-filterable by host and severity. Read-only — all writes happen through
-`backend`'s ingestion API. The marketing/waitlist landing page hasn't been
-built yet.
+Two independent services:
+
+- The **findings dashboard** (`kepler-web`) — a single Basic-Auth-protected
+  page listing findings, filterable by host and severity. Read-only — all
+  writes happen through `backend`'s ingestion API.
+- The **marketing site** (`kepler-landing`) — a public landing page with a
+  waitlist signup form. No auth (it's meant to be public), and its own
+  database, separate from the findings database.
+
+They don't share a database or a store package on purpose — a compromised
+or abused public signup form should have no path to customer vulnerability
+data.
 
 ## Components
 
 - `cmd/kepler-web` — the dashboard server.
 - `cmd/kepler-web-admin` — `hash-password` generates the bcrypt hash
   `kepler-web` needs for `KEPLER_DASHBOARD_PASSWORD_HASH`.
-- `internal/store` — read-only Postgres queries (no writes; ingestion is
-  `backend`'s job).
-- `internal/auth` — HTTP Basic Auth against a single operator credential.
+- `cmd/kepler-landing` — the marketing site + waitlist server.
+- `internal/store` — read-only findings queries (dashboard only).
+- `internal/waitlist` — waitlist signups (landing site only; no import path
+  to `internal/store`, and never should have one).
+- `internal/auth` — HTTP Basic Auth for the dashboard.
 - `internal/handlers`, `internal/templates`, `internal/api` — the HTTP
-  layer and the findings-list page itself.
+  layer for both services.
+- `db/waitlist_schema.sql` — schema for the separate `kepler_marketing`
+  database.
 
 ## Auth model
 
-A single operator username/password (env-configured), checked via HTTP
-Basic Auth, password bcrypt-hashed. Deliberately minimal for v1 — no user
-accounts, no multi-tenancy, consistent with the rest of v1's scope. Revisit
-before this needs to support multiple real operators.
+**Dashboard**: a single operator username/password (env-configured),
+checked via HTTP Basic Auth, password bcrypt-hashed. Deliberately minimal
+for v1 — no user accounts, no multi-tenancy. Revisit before this needs to
+support multiple real operators.
 
-TLS is **required by default**, same rule as `backend`: this shows
-security-sensitive data (a customer's unpatched vulnerabilities), and Basic
-Auth credentials are only as safe as the transport carrying them.
+**Landing site**: no auth — it's public by design. Anti-abuse is a hidden
+honeypot field on the signup form, not a CAPTCHA: real users never fill it
+in, so a naive bot that autofills every field trips it, and the submission
+is silently discarded (not confirmed to the bot as rejected).
+
+TLS is **required by default** on both services — the dashboard shows
+security-sensitive data, and even the public landing site shouldn't collect
+email addresses over plaintext HTTP as a quiet default.
 
 ## Local development
 
 Assumes `backend`'s local Postgres is already running (`docker compose up
--d` in `backend/`) and has some findings in it (see `backend/README.md`).
+-d` in `backend/`).
+
+### Dashboard
+
+Needs findings in the database already (see `backend/README.md`).
 
 1. Generate a dashboard password hash:
    ```
@@ -49,11 +70,31 @@ Assumes `backend`'s local Postgres is already running (`docker compose up
 3. Visit `https://localhost:8444/` (self-signed dev cert — your browser
    will warn, that's expected locally).
 
+### Landing site
+
+1. Create the marketing database and apply its schema (once):
+   ```
+   docker compose -f ../backend/docker-compose.yml exec -T postgres \
+     psql -U kepler -d kepler -c "CREATE DATABASE kepler_marketing;"
+   docker compose -f ../backend/docker-compose.yml exec -T postgres \
+     psql -U kepler -d kepler_marketing -f - < db/waitlist_schema.sql
+   ```
+2. Run the server:
+   ```
+   KEPLER_MARKETING_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler_marketing" \
+   KEPLER_TLS_CERT=../backend/dev-certs/dev.crt \
+   KEPLER_TLS_KEY=../backend/dev-certs/dev.key \
+   go run ./cmd/kepler-landing
+   ```
+3. Visit `https://localhost:8445/`.
+
 ## Tests
 
-Same convention as `backend`: store tests run against a real local
-Postgres, skipped cleanly if `KEPLER_TEST_DB_URL` isn't set.
+Same convention as `backend`: tests run against real local databases,
+skipped cleanly if the relevant env var isn't set.
 
 ```
-KEPLER_TEST_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler" go test ./...
+KEPLER_TEST_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler" \
+KEPLER_TEST_MARKETING_DB_URL="postgres://kepler:kepler_dev_only@localhost:5432/kepler_marketing" \
+go test ./...
 ```
