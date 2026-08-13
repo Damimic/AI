@@ -8,11 +8,13 @@ dashboard with severity scoring and alerting.
 
 ## Repo layout
 
-- [`agent/`](agent/) — Linux collection agent (Go). Currently: package,
-  OS/kernel, service, and open-port collection. Not yet: CVE matching,
-  backend reporting.
-- [`backend/`](backend/) — not started yet. Will provide the ingestion API
-  and Postgres-backed findings store.
+- [`agent/`](agent/) — Linux collection agent (Go). Collects packages,
+  OS/kernel, services, open ports (`kepler-agent`), and matches them
+  against CVEs via an embedded Trivy database (`kepler-matcher`, run as
+  Kepler's own tooling, not deployed to customer hosts).
+- [`backend/`](backend/) — findings ingestion API + Postgres store.
+  API-key-authenticated `POST /v1/findings`. No dashboard/query endpoints
+  yet.
 - [`web/`](web/) — not started yet. Will provide the findings dashboard and
   the marketing/waitlist landing page.
 
