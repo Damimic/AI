@@ -1,0 +1,16 @@
+[Unit]
+Description=Kepler vulnerability scanning agent
+Documentation=file:///usr/local/share/doc/kepler/agent-README.md
+After=network.target
+
+[Service]
+Type=oneshot
+DynamicUser=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+PrivateTmp=yes
+ExecStart=/usr/local/bin/kepler-agent
+
+[Install]
+WantedBy=multi-user.target

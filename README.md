@@ -24,6 +24,9 @@ dashboard with severity scoring and alerting.
   HTTPS: ingests a findings payload with a real API key, then confirms it
   renders on the dashboard. Proves the seam between services, not just each
   one in isolation.
+- [`deploy/`](deploy/) — production systemd units, a certbot renewal hook,
+  and least-privilege Postgres roles for a real deployment. See
+  [DEPLOYMENT.md](DEPLOYMENT.md) for the full runbook.
 
 ## Status
 
@@ -35,6 +38,11 @@ integration test — including the Postgres-backed store/API tests — on
 every push and pull request. No AI assistant, compliance reporting, audit
 log, billing, or multi-OS support yet — see the project brief for full
 scope.
+
+Everything so far has run locally (`localhost`, self-signed certs,
+hand-crafted demo findings). [DEPLOYMENT.md](DEPLOYMENT.md) is the runbook
+for a real deployment — real domain, real Let's Encrypt certs, real
+(encrypted) Postgres — not yet exercised against actual infrastructure.
 
 ## Security principles
 

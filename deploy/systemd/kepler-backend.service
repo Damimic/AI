@@ -1,0 +1,46 @@
+[Unit]
+Description=Kepler findings ingestion API
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+
+# Non-TLS config (DB URL, listen address) — systemd reads this file as
+# root before dropping to the dynamic user, so it never needs to be
+# world-readable. Real value lives on the host at this path, not in git.
+EnvironmentFile=/etc/kepler/backend.env
+
+# The TLS private key is root-owned and not group-readable, which a
+# DynamicUser (a per-service, no-standing-account UID) can't open
+# directly. LoadCredential has systemd itself — running as root — read
+# the file and hand a private copy to this unit's sandbox, so the
+# service never needs filesystem access to the real key.
+#
+# EDIT THESE TWO PATHS to the real certbot-issued domain before enabling.
+LoadCredential=tls.crt:/etc/letsencrypt/live/api.kepler.CHANGEME.example/fullchain.pem
+LoadCredential=tls.key:/etc/letsencrypt/live/api.kepler.CHANGEME.example/privkey.pem
+Environment=KEPLER_TLS_CERT=%d/tls.crt
+Environment=KEPLER_TLS_KEY=%d/tls.key
+
+ExecStart=/usr/local/bin/kepler-backend
+Restart=on-failure
+RestartSec=5s
+
+# Hardening — a network-facing Go binary with no need for elevated
+# privileges, extra namespaces, or a writable filesystem beyond /tmp.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,41 @@
+[Unit]
+Description=Kepler findings dashboard
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+
+# DB URL, dashboard username, dashboard bcrypt hash, listen address.
+# Read by systemd as root before dropping to the dynamic user.
+EnvironmentFile=/etc/kepler/web.env
+
+# See kepler-backend.service for why TLS material goes through
+# LoadCredential rather than KEPLER_TLS_CERT/KEY pointing at the real
+# certbot path directly.
+#
+# EDIT THESE TWO PATHS to the real certbot-issued domain before enabling.
+LoadCredential=tls.crt:/etc/letsencrypt/live/dashboard.kepler.CHANGEME.example/fullchain.pem
+LoadCredential=tls.key:/etc/letsencrypt/live/dashboard.kepler.CHANGEME.example/privkey.pem
+Environment=KEPLER_TLS_CERT=%d/tls.crt
+Environment=KEPLER_TLS_KEY=%d/tls.key
+
+ExecStart=/usr/local/bin/kepler-web
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

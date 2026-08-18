@@ -51,21 +51,7 @@ Because nothing above needs root, `kepler-agent` should run as a dedicated,
 unprivileged system user in production — this is a deployment choice, not
 something the binary enforces on its own, so it's the operator's
 responsibility to wire up. Recommended `systemd` unit:
-
-```ini
-[Unit]
-Description=Kepler vulnerability scanning agent
-After=network.target
-
-[Service]
-Type=oneshot
-DynamicUser=yes
-ProtectSystem=strict
-ProtectHome=yes
-NoNewPrivileges=yes
-PrivateTmp=yes
-ExecStart=/usr/local/bin/kepler-agent
-```
+[`../deploy/systemd/kepler-agent.service`](../deploy/systemd/kepler-agent.service).
 
 `DynamicUser=yes` allocates a throwaway, unprivileged UID for each run with
 no shell, no home directory, and no standing account to compromise —
