@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"kepler/agent/internal/collector"
-	"kepler/agent/internal/matcher"
 	"kepler/agent/internal/model"
 )
 
@@ -24,16 +23,10 @@ func TestArchitectureDoc_Agent(t *testing.T) {
 		_ func() ([]model.Port, error)                   = collector.CollectPorts
 	)
 
-	// internal/matcher — Init, Match, Close.
-	var (
-		_ func(string) error                                                              = matcher.Init
-		_ func(context.Context, model.HostInfo, []model.Package) ([]model.Finding, error) = matcher.Match
-		_ func() error                                                                    = matcher.Close
-	)
-
-	// internal/model — the data shapes the table names.
+	// internal/model — the data shapes the table names. Note: matching
+	// (and its Finding output type) moved to backend/internal/matcher —
+	// see that module's own architecture_doc_test.go.
 	_ = model.ScanReport{}
-	_ = model.Finding{}
 	_ = model.HostInfo{}
 	_ = model.Package{}
 	_ = model.Service{}

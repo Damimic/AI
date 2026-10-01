@@ -12,9 +12,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"kepler/backend/internal/api"
+	"kepler/backend/internal/matcher"
 	"kepler/backend/internal/store"
 )
 
@@ -38,7 +40,26 @@ func run() error {
 	}
 	defer st.Close()
 
-	handler := api.NewServer(st)
+	// Opening the vulnerability database is a soft dependency, not a hard
+	// requirement to start: POST /v1/findings (pre-matched submissions)
+	// works regardless, and an existing deployment that never set this up
+	// must keep working exactly as before. Only POST /v1/scan-reports
+	// needs it, and degrades to a clear 503 rather than taking the whole
+	// server down if it's missing.
+	matchingAvailable := true
+	trivyDBDir, err := resolveTrivyDBDir()
+	if err != nil {
+		log.Printf("WARNING: resolving vulnerability database directory: %v — POST /v1/scan-reports will return 503", err)
+		matchingAvailable = false
+	} else if err := matcher.Init(trivyDBDir); err != nil {
+		log.Printf("WARNING: opening vulnerability database at %s: %v — POST /v1/scan-reports will return 503 until this is fixed (run `trivy image --download-db-only`, or set KEPLER_TRIVY_DB_DIR)", trivyDBDir, err)
+		matchingAvailable = false
+	} else {
+		defer matcher.Close()
+		log.Printf("vulnerability database opened at %s — POST /v1/scan-reports is live", trivyDBDir)
+	}
+
+	handler := api.NewServer(st, matchingAvailable)
 
 	addr := os.Getenv("KEPLER_LISTEN_ADDR")
 	if addr == "" {
@@ -72,4 +93,18 @@ func run() error {
 
 	log.Printf("kepler-backend listening on %s (HTTPS)", addr)
 	return srv.ListenAndServeTLS(certFile, keyFile)
+}
+
+// resolveTrivyDBDir finds the Trivy-managed vulnerability database,
+// following the same OS-appropriate cache location the trivy CLI itself
+// uses, unless overridden explicitly.
+func resolveTrivyDBDir() (string, error) {
+	if dir := os.Getenv("KEPLER_TRIVY_DB_DIR"); dir != "" {
+		return dir, nil
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving cache directory: %w", err)
+	}
+	return filepath.Join(cacheDir, "trivy", "db"), nil
 }

@@ -9,13 +9,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"kepler/backend/internal/auth"
+	"kepler/backend/internal/matcher"
 	"kepler/backend/internal/store"
 )
 
 func testServer(t *testing.T) (http.Handler, *store.Store) {
+	t.Helper()
+	return testServerWithMatching(t, false)
+}
+
+func testServerWithMatching(t *testing.T, matchingAvailable bool) (http.Handler, *store.Store) {
 	t.Helper()
 	dbURL := os.Getenv("KEPLER_TEST_DB_URL")
 	if dbURL == "" {
@@ -26,7 +33,7 @@ func testServer(t *testing.T) (http.Handler, *store.Store) {
 		t.Fatalf("opening test database: %v", err)
 	}
 	t.Cleanup(st.Close)
-	return NewServer(st), st
+	return NewServer(st, matchingAvailable), st
 }
 
 func randomSuffix(t *testing.T) string {
@@ -165,4 +172,80 @@ func TestIngestFindings_HostIdentityFromAuth(t *testing.T) {
 	// Each request's ingestion is tied to whichever key authenticated it —
 	// covered at the store layer by TestInsertFindings; this test's job is
 	// just confirming both distinct identities are independently accepted.
+}
+
+func TestScanReports_RequiresAuth(t *testing.T) {
+	handler, _ := testServerWithMatching(t, true)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/scan-reports", bytes.NewBufferString(`{}`))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("got status %d, want %d", rec.Code, http.StatusUnauthorized)
+	}
+}
+
+// TestScanReports_UnavailableWithoutDB confirms an authenticated request
+// gets a clear 503, not a crash or a silent no-op, when the backend never
+// opened a vulnerability database — this is the backward-compatibility
+// path for a deployment that only ever used POST /v1/findings.
+func TestScanReports_UnavailableWithoutDB(t *testing.T) {
+	handler, st := testServerWithMatching(t, false)
+	_, apiKey := provisionHost(t, st)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/scan-reports", bytes.NewBufferString(`{"host":{"os_name":"Ubuntu","os_version_id":"22.04"},"packages":[]}`))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("got status %d, want %d", rec.Code, http.StatusServiceUnavailable)
+	}
+}
+
+// TestScanReports_Integration exercises the real end-to-end path — decode,
+// match against a real trivy-db, store — the same way TestMatch_Integration
+// does in internal/matcher. Skipped if no local database is set up, same
+// convention, for the same reason: this is real vulnerability data, not
+// something to fixture/fake.
+func TestScanReports_Integration(t *testing.T) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatalf("resolving cache dir: %v", err)
+	}
+	dbDir := filepath.Join(cacheDir, "trivy", "db")
+	if _, err := os.Stat(filepath.Join(dbDir, "trivy.db")); err != nil {
+		t.Skipf("trivy vulnerability DB not found at %s; run `trivy image --download-db-only` to enable this test", dbDir)
+	}
+	if err := matcher.Init(dbDir); err != nil {
+		t.Fatalf("matcher.Init: %v", err)
+	}
+	t.Cleanup(func() { matcher.Close() })
+
+	handler, st := testServerWithMatching(t, true)
+	_, apiKey := provisionHost(t, st)
+
+	body := `{
+		"host": {"os_name": "Ubuntu", "os_version_id": "22.04"},
+		"packages": [{"name": "libssl3", "version": "3.0.2-0ubuntu1.1", "source_package": "openssl", "source_version": "3.0.2-0ubuntu1.1"}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/scan-reports", bytes.NewBufferString(body))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("got status %d, want %d (body: %s)", rec.Code, http.StatusCreated, rec.Body.String())
+	}
+
+	var resp struct {
+		Stored int `json:"stored"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if resp.Stored == 0 {
+		t.Error("expected at least one finding for a deliberately outdated openssl, got zero stored")
+	}
 }

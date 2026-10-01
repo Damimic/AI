@@ -9,11 +9,11 @@ import (
 
 	ftypes "github.com/aquasecurity/trivy/pkg/fanal/types"
 
-	"kepler/agent/internal/model"
+	"kepler/backend/internal/model"
 )
 
 func TestToTrivyPackages(t *testing.T) {
-	packages := []model.Package{
+	packages := []model.ScanReportPackage{
 		{
 			// binary package name differs from source package name/version —
 			// the case that broke the first version of this integration.
@@ -86,8 +86,8 @@ func TestMatch_Integration(t *testing.T) {
 	}
 	defer Close()
 
-	host := model.HostInfo{Hostname: "test-host", OSName: "Ubuntu", OSVersionID: "22.04"}
-	packages := []model.Package{
+	host := model.ScanReportHost{OSName: "Ubuntu", OSVersionID: "22.04"}
+	packages := []model.ScanReportPackage{
 		{
 			Name: "libssl3", Version: "3.0.2-0ubuntu1.1",
 			SourcePackage: "openssl", SourceVersion: "3.0.2-0ubuntu1.1",
@@ -103,9 +103,6 @@ func TestMatch_Integration(t *testing.T) {
 		t.Fatal("expected at least one finding for a deliberately outdated openssl, got none")
 	}
 	for _, f := range findings {
-		if f.Host != "test-host" {
-			t.Errorf("finding %s: host = %q, want %q", f.CVEID, f.Host, "test-host")
-		}
 		if f.CVEID == "" {
 			t.Errorf("finding has empty CVE ID: %+v", f)
 		}

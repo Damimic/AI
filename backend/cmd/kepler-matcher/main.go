@@ -1,11 +1,16 @@
-// Command kepler-matcher reads a kepler-agent ScanReport (JSON, from stdin)
-// and matches its packages against a local Trivy vulnerability database,
-// printing structured findings as JSON.
+// Command kepler-matcher is an offline debug tool: it reads a scan-report
+// shaped JSON body (the same shape POST /v1/scan-reports accepts, from
+// stdin) and matches it against a local Trivy vulnerability database,
+// printing the resulting findings as JSON.
 //
-// This is not part of what ships to customer infrastructure — it's Kepler's
-// own tooling, run wherever the vulnerability database is managed (a dev
-// machine today, the backend eventually). It expects a database already
-// downloaded by the trivy CLI: `trivy image --download-db-only`.
+// This is not part of what ships to customer infrastructure, and it's not
+// what a live agent uses either — a running kepler-backend does this same
+// matching automatically as part of handling POST /v1/scan-reports. This
+// exists for offline triage: feed it a captured scan report, see what
+// would match, without a live backend or database connection.
+//
+// It expects a database already downloaded by the trivy CLI:
+// `trivy image --download-db-only`.
 package main
 
 import (
@@ -15,8 +20,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"kepler/agent/internal/matcher"
-	"kepler/agent/internal/model"
+	"kepler/backend/internal/matcher"
+	"kepler/backend/internal/model"
 )
 
 func main() {
@@ -37,7 +42,7 @@ func run() error {
 	}
 	defer matcher.Close()
 
-	var report model.ScanReport
+	var report model.ScanReportInput
 	if err := json.NewDecoder(os.Stdin).Decode(&report); err != nil {
 		return fmt.Errorf("reading scan report from stdin: %w", err)
 	}

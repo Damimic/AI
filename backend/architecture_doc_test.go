@@ -15,18 +15,28 @@ import (
 
 	"kepler/backend/internal/api"
 	"kepler/backend/internal/auth"
+	"kepler/backend/internal/matcher"
 	"kepler/backend/internal/model"
 	"kepler/backend/internal/store"
 )
 
 func TestArchitectureDoc_Backend(t *testing.T) {
 	// internal/api — NewServer.
-	var _ func(*store.Store) http.Handler = api.NewServer
+	var _ func(*store.Store, bool) http.Handler = api.NewServer
 
 	// internal/auth — GenerateAPIKey, HashAPIKey.
 	var (
 		_ func() (string, string, error) = auth.GenerateAPIKey
 		_ func(string) string            = auth.HashAPIKey
+	)
+
+	// internal/matcher — Init, Match, Close. Moved here from the agent
+	// module — see this file's own package comment and matcher's doc
+	// comment for why matching now lives where it's actually run.
+	var (
+		_ func(string) error                                                                                   = matcher.Init
+		_ func(context.Context, model.ScanReportHost, []model.ScanReportPackage) ([]model.FindingInput, error) = matcher.Match
+		_ func() error                                                                                         = matcher.Close
 	)
 
 	// internal/store — Open, CreateHost, CreateAPIKey, HostIDForKeyHash,
@@ -46,4 +56,7 @@ func TestArchitectureDoc_Backend(t *testing.T) {
 	_ = model.FindingInput{}
 	_ = model.IngestRequest{}
 	_ = model.IngestResponse{}
+	_ = model.ScanReportInput{}
+	_ = model.ScanReportHost{}
+	_ = model.ScanReportPackage{}
 }
