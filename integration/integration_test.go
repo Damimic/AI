@@ -197,6 +197,138 @@ func TestEndToEnd(t *testing.T) {
 	}
 }
 
+// TestEndToEnd_ScanReport proves the new primary production path: a real
+// kepler-agent sends raw collected data, not pre-matched findings — the
+// real kepler-backend binary has to do the CVE matching itself and still
+// end up rendering correctly on the real kepler-web binary's dashboard.
+// This is the path TestEndToEnd's hand-crafted findings bypass entirely.
+//
+// Skipped cleanly if no local Trivy vulnerability database is present,
+// same convention as backend/internal/matcher's own integration test —
+// this needs real vulnerability data, not something to fixture/fake.
+func TestEndToEnd_ScanReport(t *testing.T) {
+	baseDBURL := os.Getenv("KEPLER_TEST_DB_URL")
+	if baseDBURL == "" {
+		t.Skip("KEPLER_TEST_DB_URL not set; run `docker compose up -d` in backend/ and set it to enable the end-to-end test")
+	}
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		t.Fatalf("resolving cache dir: %v", err)
+	}
+	trivyDBDir := filepath.Join(cacheDir, "trivy", "db")
+	if _, err := os.Stat(filepath.Join(trivyDBDir, "trivy.db")); err != nil {
+		t.Skipf("trivy vulnerability DB not found at %s; run `trivy image --download-db-only` to enable this test", trivyDBDir)
+	}
+	ctx := context.Background()
+
+	repoRoot, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("resolving repo root: %v", err)
+	}
+	backendDir := filepath.Join(repoRoot, "backend")
+	webDir := filepath.Join(repoRoot, "web")
+	schemaPath := filepath.Join(backendDir, "db", "schema.sql")
+
+	dbName := fmt.Sprintf("kepler_it_sr_%d", time.Now().UnixNano())
+	testDBURL := createTestDatabase(t, ctx, baseDBURL, dbName, schemaPath)
+
+	tmpDir := t.TempDir()
+	certPath, keyPath := generateSelfSignedCert(t, tmpDir)
+
+	backendBin := buildBinary(t, backendDir, "kepler-backend", tmpDir)
+	adminBin := buildBinary(t, backendDir, "kepler-backend-admin", tmpDir)
+	webBin := buildBinary(t, webDir, "kepler-web", tmpDir)
+	webAdminBin := buildBinary(t, webDir, "kepler-web-admin", tmpDir)
+
+	backendAddr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	webAddr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+
+	client := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		Timeout:   10 * time.Second,
+	}
+
+	startProcess(t, "kepler-backend", backendBin, nil, []string{
+		"KEPLER_DB_URL=" + testDBURL,
+		"KEPLER_TLS_CERT=" + certPath,
+		"KEPLER_TLS_KEY=" + keyPath,
+		"KEPLER_LISTEN_ADDR=" + backendAddr,
+		"KEPLER_TRIVY_DB_DIR=" + trivyDBDir,
+	})
+	waitForTCP(t, backendAddr, 10*time.Second)
+
+	hostname := "it-scan-report-host"
+	apiKey := createHost(t, adminBin, testDBURL, hostname)
+
+	// A deliberately outdated openssl/libssl3 — the same package
+	// backend/internal/matcher's own integration test uses, so this is
+	// known to produce real findings against a real database.
+	scanReport := `{
+		"host": {"os_name": "Ubuntu", "os_version_id": "22.04"},
+		"packages": [{"name": "libssl3", "version": "3.0.2-0ubuntu1.1", "source_package": "openssl", "source_version": "3.0.2-0ubuntu1.1"}]
+	}`
+	req, err := http.NewRequest(http.MethodPost, "https://"+backendAddr+"/v1/scan-reports", bytes.NewBufferString(scanReport))
+	if err != nil {
+		t.Fatalf("building scan report request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("posting scan report: %v", err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("reading scan report response: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("scan report: expected 201, got %d: %s", resp.StatusCode, respBody)
+	}
+	var scanResp ingestResponse
+	if err := json.Unmarshal(respBody, &scanResp); err != nil {
+		t.Fatalf("decoding scan report response: %v", err)
+	}
+	if scanResp.Stored == 0 {
+		t.Fatal("expected real server-side matching to find at least one CVE for a deliberately outdated openssl, got zero")
+	}
+
+	dashboardUser := "operator"
+	dashboardPassword := "it-test-scan-report-password"
+	passwordHash := hashPassword(t, webAdminBin, dashboardPassword)
+
+	startProcess(t, "kepler-web", webBin, nil, []string{
+		"KEPLER_DB_URL=" + testDBURL,
+		"KEPLER_DASHBOARD_USER=" + dashboardUser,
+		"KEPLER_DASHBOARD_PASSWORD_HASH=" + passwordHash,
+		"KEPLER_TLS_CERT=" + certPath,
+		"KEPLER_TLS_KEY=" + keyPath,
+		"KEPLER_LISTEN_ADDR=" + webAddr,
+	})
+	waitForTCP(t, webAddr, 10*time.Second)
+
+	dashReq, err := http.NewRequest(http.MethodGet, "https://"+webAddr+"/?host="+hostname, nil)
+	if err != nil {
+		t.Fatalf("building dashboard request: %v", err)
+	}
+	dashReq.SetBasicAuth(dashboardUser, dashboardPassword)
+	dashResp, err := client.Do(dashReq)
+	if err != nil {
+		t.Fatalf("fetching dashboard: %v", err)
+	}
+	defer dashResp.Body.Close()
+	dashBody, err := io.ReadAll(dashResp.Body)
+	if err != nil {
+		t.Fatalf("reading dashboard body: %v", err)
+	}
+	if dashResp.StatusCode != http.StatusOK {
+		t.Fatalf("dashboard: expected 200, got %d: %s", dashResp.StatusCode, dashBody)
+	}
+	if !strings.Contains(string(dashBody), "libssl3") {
+		t.Error("dashboard page missing the server-matched libssl3 finding")
+	}
+}
+
 func postFindings(t *testing.T, client *http.Client, backendAddr, apiKey string, body []byte) ingestResponse {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodPost, "https://"+backendAddr+"/v1/findings", bytes.NewReader(body))
