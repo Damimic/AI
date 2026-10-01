@@ -5,6 +5,44 @@ deployment pressure, collected here instead of scattered across commit
 messages. Kepler itself is a valuable attack target — it maps every
 customer's unpatched vulnerabilities — so these aren't optional polish.
 
+## Threat surface
+
+A map from attack vector to the specific thing that stops it, so this is
+auditable at a glance rather than requiring a read of every module's
+source to answer "what happens if someone tries X."
+
+| Vector | Mitigation |
+|---|---|
+| SQL injection | Every query across all three modules uses parameterized placeholders (pgx) — no string-built SQL anywhere in the codebase. |
+| Plaintext credential storage | API keys are SHA-256 hashed before storage (raw key shown once, never persisted); the dashboard password is bcrypt-hashed. Neither is ever stored or logged in plaintext. |
+| Auth timing side-channel | Dashboard Basic Auth runs bcrypt unconditionally whenever credentials are present, regardless of whether the username matches, so a wrong username and a wrong password take the same time to reject (fixed after an earlier version short-circuited on username mismatch, which leaked which usernames were valid via response timing). |
+| Cross-host impersonation | An authenticated ingestion request's host identity is resolved server-side from the API key alone, never from anything in the request body — an agent authenticated as one host cannot claim findings for another. |
+| Unbounded ingestion requests | Request bodies are capped at 10 MiB (`http.MaxBytesReader`) and batches at 10,000 findings per request — a valid (or leaked) API key can't force an unbounded body or a multi-million-row insert. |
+| XSS via finding data | The dashboard uses `html/template`, not `text/template` — context-aware auto-escaping, verified against a literal `<script>` tag injected through finding data, not just assumed to work. |
+| Plaintext transport | `kepler-backend` and `kepler-web` both refuse to start over HTTP unless `KEPLER_INSECURE_HTTP=true` is set explicitly — there is no quiet plaintext default. |
+| Agent privilege escalation | `kepler-agent` needs no elevated privileges (every collector is a read-only query against already world-readable data) and the recommended production deployment runs it under a `DynamicUser` systemd unit with no standing account — see `agent/README.md`. |
+| Database over-privilege | Production deployment uses one least-privilege Postgres role per service (`deploy/db/production-roles-*.sql`) — the dashboard's role, for instance, has `SELECT` only, enforced by Postgres itself. Local dev uses a single shared role for simplicity, a deliberate simplification since it only ever holds disposable test data. |
+| Ambiguous "no filter" sentinel | The dashboard's host filter treats an empty string as "no filter." `CreateHost` rejects empty/whitespace-only hostnames so a host can never actually be named `""`, which would otherwise be silently indistinguishable from "show everything." |
+
+## What Kepler does NOT do
+
+- Does not execute code derived from collected data. Every collector shells
+  out to a fixed command with fixed arguments (`dpkg-query -W -f <format>`,
+  `systemctl list-units --type=service ...`) or reads a fixed file path —
+  nothing about *what* a command runs is ever built from package data, a
+  hostname, or any other value Kepler doesn't control.
+- Does not make outbound network calls to any third party. The only
+  outbound connection any service makes is to the Postgres instance an
+  operator configures — no telemetry, no external APIs, no phone-home.
+- Does not store or transmit API keys or the dashboard password in
+  plaintext, anywhere, ever.
+- Does not trust client-supplied identity for anything security-relevant —
+  see "Cross-host impersonation" above.
+- Does not collect file contents, environment variables, command history,
+  or any other sensitive data dump — only package name/version and basic
+  config state (see the project brief's "don't collect more than needed"
+  principle).
+
 ## Encryption at rest — required before any real deployment
 
 **Status: not yet applicable. No production infrastructure exists yet.**
