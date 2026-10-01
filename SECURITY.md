@@ -23,6 +23,7 @@ source to answer "what happens if someone tries X."
 | Agent privilege escalation | `kepler-agent` needs no elevated privileges (every collector is a read-only query against already world-readable data) and the recommended production deployment runs it under a `DynamicUser` systemd unit with no standing account — see `agent/README.md`. |
 | Database over-privilege | Production deployment uses one least-privilege Postgres role per service (`deploy/db/production-roles-*.sql`) — the dashboard's role, for instance, has `SELECT` only, enforced by Postgres itself. Local dev uses a single shared role for simplicity, a deliberate simplification since it only ever holds disposable test data. |
 | Ambiguous "no filter" sentinel | The dashboard's host filter treats an empty string as "no filter." `CreateHost` rejects empty/whitespace-only hostnames so a host can never actually be named `""`, which would otherwise be silently indistinguishable from "show everything." |
+| Breaking an existing deployment by adding a feature | `POST /v1/scan-reports` (server-side CVE matching) needs a vulnerability database; `POST /v1/findings` (pre-matched submissions) never did. The backend treats the database as a soft dependency — missing or unreachable, the server still starts and `/v1/findings` keeps working exactly as before; only the new endpoint returns a clear `503`. Adding capability was not allowed to silently raise the bar for what every deployment must now provide. |
 
 ## What Kepler does NOT do
 
@@ -109,3 +110,11 @@ credentials are only as safe as the transport carrying them.
   service.
 - `kepler-web`'s templates use `html/template` (auto-escaping), verified
   against a literal `<script>` tag in finding data, not just assumed.
+- `kepler-agent`'s network reporting verifies the backend's TLS certificate
+  by default; skipping verification requires explicitly setting
+  `KEPLER_INSECURE_SKIP_VERIFY=true`, logged as a warning, same pattern as
+  every other insecure-override in this codebase.
+- `kepler-backend` degrades gracefully, not catastrophically, when its
+  vulnerability database is missing — see the threat surface table's
+  "breaking an existing deployment by adding a feature" row. Verified by a
+  real test (`TestScanReports_UnavailableWithoutDB`), not just asserted.

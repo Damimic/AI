@@ -11,11 +11,24 @@ convention not to use one.
 ## Pipeline
 
 ```
-collect            match                  ingest                 store            query/display
-(agent/collector) → (agent/matcher,     → (backend/api,        → (backend/store, → (web/store,
-                      kepler-matcher)       kepler-backend,        Postgres)        web/handlers,
-                                            POST /v1/findings,                      web/templates)
-                                            API-key auth)
+collect              report/match             store            query/display
+(agent/collector,  → (backend/api,          → (backend/store, → (web/store,
+ kepler-agent)         backend/matcher,         Postgres)        web/handlers,
+                       POST /v1/scan-reports,                    web/templates)
+                       API-key auth)
+```
+
+Matching used to be a separate step the agent module owned (`agent/matcher`,
+run offline via `kepler-matcher`) — it moved into the backend so a live
+agent can report and see results automatically, with no human running a
+matching step in between. `POST /v1/findings` still exists as a second,
+narrower path for pre-matched submissions (manual/offline use), bypassing
+matching entirely:
+
+```
+ingest (pre-matched)   store
+(backend/api,        → (backend/store,
+ POST /v1/findings)      Postgres)
 ```
 
 A second, fully independent pipeline runs alongside it:
@@ -42,26 +55,31 @@ covering the whole table.
 | Package | Entry point(s) | Input → Output |
 |---|---|---|
 | `internal/collector` | `CollectPackages(ctx)`, `CollectOSInfo(ctx)`, `CollectServices(ctx)`, `CollectPorts()` | live host state (dpkg, `/etc/os-release`, systemd, `/proc/net/*`) → `model.Package` / `model.HostInfo` / `model.Service` / `model.Port` |
-| `internal/matcher` | `Init(dbDir)`, `Match(ctx, host, packages)`, `Close()` | collected packages + a local trivy-db → `[]model.Finding` |
-| `internal/model` | types only: `ScanReport`, `Finding`, `HostInfo`, `Package`, `Service`, `Port` | the data shapes everything above produces |
+| `internal/model` | types only: `ScanReport`, `HostInfo`, `Package`, `Service`, `Port` | the data shapes collection produces |
 
-`cmd/kepler-agent` runs the four collectors and prints a `ScanReport` as
-JSON. `cmd/kepler-matcher` reads a `ScanReport` from stdin and prints
-`[]Finding` as JSON — a bare array, not wrapped in `{"findings": [...]}`,
-which is why there's currently no one-line pipe from agent output straight
-into the backend (see `DEPLOYMENT.md`'s "what this doesn't cover").
+`cmd/kepler-agent` runs the four collectors, then either prints the
+resulting `ScanReport` as JSON (default, stdout) or POSTs it to
+`KEPLER_BACKEND_URL/v1/scan-reports` (when `KEPLER_BACKEND_URL` and
+`KEPLER_API_KEY` are both set — the production path). This module has zero
+third-party dependencies — `go.sum` is empty — now that matching (and its
+Trivy dependency) lives in `backend/`.
 
 ### `backend/`
 
 | Package | Entry point(s) | Input → Output |
 |---|---|---|
-| `internal/api` | `NewServer(st)` | wires `POST /v1/findings` behind API-key auth into an `http.Handler` |
+| `internal/api` | `NewServer(st, matchingAvailable)` | wires both ingestion endpoints behind API-key auth into an `http.Handler` |
 | `internal/auth` | `GenerateAPIKey()`, `HashAPIKey(raw)` | a fresh key pair / a hash to compare against storage |
+| `internal/matcher` | `Init(dbDir)`, `Match(ctx, host, packages)`, `Close()` | a scan report + a local trivy-db → `[]model.FindingInput`, ready to store |
 | `internal/store` | `Open(ctx, url)`, `CreateHost`, `CreateAPIKey`, `HostIDForKeyHash`, `InsertFindings` | Postgres access — the only module that ever writes findings |
-| `internal/model` | `FindingInput`, `IngestRequest`, `IngestResponse` | the JSON wire contract for `POST /v1/findings` |
+| `internal/model` | `ScanReportInput`, `FindingInput`, `IngestRequest`, `IngestResponse` | the JSON wire contracts for both `POST` endpoints |
 
-`cmd/kepler-backend` serves the API. `cmd/kepler-backend-admin` is the
-operator CLI for provisioning hosts (no self-service enrollment in v1).
+`cmd/kepler-backend` serves the API, and tries to open a vulnerability
+database at startup (soft dependency — see `backend/README.md`'s "the
+vulnerability database is a soft dependency, not a hard one"). `cmd/kepler-backend-admin`
+is the operator CLI for provisioning hosts (no self-service enrollment in
+v1). `cmd/kepler-matcher` is an offline debug tool — not part of any live
+path.
 
 ### `web/`
 

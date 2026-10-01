@@ -3,10 +3,11 @@
 This is the runbook for taking `kepler-backend`, `kepler-web`, and
 `kepler-landing` off `localhost` and onto real infrastructure: a real
 domain, real Let's Encrypt certificates, a real (encrypted) Postgres
-instance, and each service running as a hardened systemd unit.
-
-It does **not** cover `kepler-agent` reporting from a real scanned host —
-see "What this doesn't cover" at the end for why, and what's missing.
+instance, each service running as a hardened systemd unit, and a real
+`kepler-agent` onboarded and reporting from an actual scanned host
+(Step 8). See "What this doesn't cover" at the end for what's still
+manual even after all of that (database refresh automation, backups,
+monitoring, binary distribution).
 
 You'll need:
 
@@ -228,7 +229,52 @@ sudo systemctl enable --now kepler-backend kepler-web kepler-landing
 sudo systemctl status kepler-backend kepler-web kepler-landing
 ```
 
-## Step 7 — Verify
+## Step 7 — Vulnerability database (for scan-report matching)
+
+`POST /v1/scan-reports` — the endpoint a real `kepler-agent` reports
+to — needs a Trivy vulnerability database on the backend host.
+`POST /v1/findings` works without this step; skip it if you only need
+pre-matched submissions.
+
+`kepler-backend` resolves the database at `KEPLER_TRIVY_DB_DIR`, defaulting
+to the same per-user cache location the `trivy` CLI itself uses — which
+doesn't work here, because `kepler-backend.service` runs under
+`DynamicUser` (a different, freshly allocated UID on every restart, with
+no persistent home directory). **Set `KEPLER_TRIVY_DB_DIR` explicitly** to
+a fixed, shared path instead:
+
+```
+sudo apt install -y trivy   # or see https://trivy.dev for other install methods
+sudo mkdir -p /var/lib/kepler/trivy-db
+sudo trivy image --download-db-only --cache-dir /var/lib/kepler/trivy-db
+echo 'KEPLER_TRIVY_DB_DIR=/var/lib/kepler/trivy-db/db' | sudo tee -a /etc/kepler/backend.env
+```
+
+`kepler-backend.service`'s `ProtectSystem=strict` makes this directory
+read-only to the service by default — add
+`ReadOnlyPaths=/var/lib/kepler/trivy-db` to the unit (read-only is
+correct: the backend only ever reads this database, never writes it).
+
+**This needs periodic refreshing** — new CVEs are published continuously,
+and a stale database silently produces stale findings, not an error. Set
+up a daily timer (`trivy image --download-db-only --cache-dir
+/var/lib/kepler/trivy-db` on a cron/systemd timer, then `systemctl restart
+kepler-backend` to pick it up — matcher.Init only reads the database once
+at startup, same reload story as the TLS certs). **Not yet built** — see
+"what this doesn't cover" below.
+
+## Step 8 — Onboard a scanned host
+
+With the backend live and a vulnerability database in place, enroll a real
+host — see `agent/README.md`'s "Onboarding a host" section for the full
+walkthrough. Short version: provision it
+(`kepler-backend-admin create-host <hostname>`), cross-compile
+`kepler-agent` for Linux, copy it plus `deploy/install-agent.sh` and
+`deploy/systemd/` to the target host, then run
+`sudo ./install-agent.sh <backend-url> <api-key>` there. It reports every
+6 hours on its own from that point on.
+
+## Step 9 — Verify
 
 From your local machine, not the VPS (proves it's actually reachable from
 the outside):
@@ -238,36 +284,39 @@ curl -I https://kepler.<your-domain>:8445/
 curl -I https://api.kepler.<your-domain>:8443/v1/findings   # expect 401, not a connection error — proves auth is live
 ```
 
-Provision a real host and post a real finding through the real domain,
-same as the local demo but over the internet this time:
+If you don't have a real Linux host handy yet for Step 8, prove the full
+matching path works first with a hand-built scan report (real matching,
+fake collection — `agent/README.md`'s onboarding flow is what replaces
+this with a genuinely collected one):
 
 ```
 KEPLER_DB_URL="postgres://kepler:CHANGEME@localhost/kepler" /usr/local/bin/kepler-backend-admin create-host first-real-host
 # then from your local machine:
-curl -X POST https://api.kepler.<your-domain>:8443/v1/findings \
+curl -X POST https://api.kepler.<your-domain>:8443/v1/scan-reports \
   -H "Authorization: Bearer <the key just printed>" \
   -H "Content-Type: application/json" \
-  -d '{"findings":[{"package":"openssl","version":"1.1.1f","cve_id":"CVE-2023-0286","severity":"HIGH"}]}'
+  -d '{"host":{"os_name":"Ubuntu","os_version_id":"22.04"},"packages":[{"name":"libssl3","version":"3.0.2-0ubuntu1.1","source_package":"openssl","source_version":"3.0.2-0ubuntu1.1"}]}'
 ```
 
 Then open `https://dashboard.kepler.<your-domain>:8444/` in a real
-browser with a real, CA-trusted cert — no warning this time.
+browser with a real, CA-trusted cert — no warning this time. Once Step 8's
+real agent has reported, the same dashboard shows its actual findings
+instead.
 
 ## What this doesn't cover
 
-- **`kepler-agent` isn't wired up to report automatically.** Its own
-  README covers running it (`deploy/systemd/kepler-agent.service` is
-  included here too), but `kepler-matcher` prints a bare JSON array of
-  findings, not the `{"findings": [...]}` shape `/v1/findings` expects —
-  there's no glue script that collects, matches, reshapes, and posts in
-  one step yet. `backend/README.md`'s own usage example has a literal
-  `<reshape into {"findings": [...]}>` placeholder. Worth building before
-  actually pointing this at a real scanned fleet; out of scope for this
-  pass, which was specifically about getting backend/web/landing
-  deployable.
+- **Automatic vulnerability database refresh.** Step 7 populates the
+  database once; nothing here sets up the daily (or so) re-run that keeps
+  it current. A stale database doesn't error — it just silently produces
+  stale findings. Needs a cron job or systemd timer running
+  `trivy image --download-db-only` plus a `kepler-backend` restart, neither
+  of which exists yet as a shipped artifact.
 - **Backups.** Nothing here backs up the Postgres data directory.
 - **Monitoring/alerting** on the services themselves (uptime, disk space,
   cert expiry beyond certbot's own renewal).
 - **Key rotation runbook** — `api_keys` supports revocation/rotation at
   the schema level (see `backend/README.md`), but there's no documented
   operational process for actually doing it yet.
+- **Binary distribution.** Onboarding a host (Step 8) still means
+  cross-compiling and `scp`-ing a binary by hand — there's no release
+  pipeline or package to install from instead.

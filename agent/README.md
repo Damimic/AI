@@ -1,27 +1,43 @@
 # agent
 
-Linux-only collection agent. `kepler-agent` collects installed
-packages/versions, OS/kernel version, running services, and open ports from
-the local host and prints a structured JSON scan report — no network
-reporting yet (that happens once its output is piped into `kepler-matcher`
-and on to `backend`'s ingestion API).
+Linux-only collection agent, and genuinely dependency-free (stdlib only —
+`go.sum` is empty). `kepler-agent` collects installed packages/versions,
+OS/kernel version, running services, and open ports from the local host.
 
-`kepler-matcher` is separate: it matches a scan report against CVEs via an
-embedded Trivy database. It's Kepler's own tooling, run wherever findings
-are matched — not deployed to customer hosts alongside `kepler-agent`.
+CVE matching no longer happens here — it used to (via an embedded Trivy
+database), but that pulled in a sizeable dependency tree for a binary meant
+to stay minimal, and matching only ever ran as separate offline tooling
+anyway, never on a customer host. It now lives in
+[`../backend/internal/matcher`](../backend/internal/matcher), run
+automatically as part of handling `POST /v1/scan-reports`. See that
+module's README for the operational side (the backend now needs its own
+vulnerability database).
+
+## Reporting modes
+
+- **Default**: prints the scan report as JSON to stdout. Useful for local
+  debugging or piping into something else.
+- **Network reporting**: when `KEPLER_BACKEND_URL` and `KEPLER_API_KEY` are
+  both set, POSTs the report to `<KEPLER_BACKEND_URL>/v1/scan-reports`
+  instead, authenticated with the key, and prints a one-line confirmation
+  to stderr. This is the production mode — see
+  [`../deploy/install-agent.sh`](../deploy/install-agent.sh) and
+  [`../deploy/systemd/kepler-agent.timer`](../deploy/systemd/kepler-agent.timer)
+  for running it unattended on a schedule.
+
+`KEPLER_INSECURE_SKIP_VERIFY=true` disables TLS certificate verification
+on the reporting connection — for testing against a self-signed dev cert
+only, same explicit-override pattern as the backend's own
+`KEPLER_INSECURE_HTTP`. Never use this against a real deployment.
 
 ## Components
 
-- `cmd/kepler-agent` — runs all four collectors, prints a `ScanReport` as
-  JSON to stdout.
-- `cmd/kepler-matcher` — reads a `ScanReport` and matches it against a
-  local Trivy vulnerability database (`trivy image --download-db-only`
-  first; see `internal/matcher`'s package comment).
+- `cmd/kepler-agent` — runs all four collectors, then either prints the
+  resulting `ScanReport` (stdout mode) or POSTs it (network mode).
 - `internal/collector` — one file per data source: `packages.go` (dpkg),
   `osinfo.go` (`/etc/os-release`, `uname -r`), `services.go` (systemd),
   `ports.go` (`/proc/net/{tcp,udp}[6]`).
-- `internal/model` — `ScanReport` (collection output) and `Finding`
-  (matching output) shapes.
+- `internal/model` — the `ScanReport` shape collection produces.
 
 ## Privilege model
 
@@ -39,19 +55,44 @@ Linux host:
 - **Ports** — reads `/proc/net/tcp`, `/proc/net/tcp6`, `/proc/net/udp`,
   `/proc/net/udp6` directly; these are world-readable procfs entries.
 
-Nothing here writes to the host, opens a listening socket, or reads
-anything outside these four sources — see [`../SECURITY.md`](../SECURITY.md)
-for the broader "why" (an unpatched-vulnerability inventory is itself an
-attractive attack target, so the agent's own footprint has to stay
-minimal).
+Reporting adds one more thing: an outbound HTTPS connection to the
+configured backend URL, carrying only the collected `ScanReport` and the
+API key. Nothing here writes to the host, opens a listening socket, or
+reads anything outside the four sources above — see
+[`../SECURITY.md`](../SECURITY.md) for the broader "why" (an
+unpatched-vulnerability inventory is itself an attractive attack target,
+so the agent's own footprint has to stay minimal).
 
-## Deploying as a dedicated non-root user
+## Onboarding a host (recommended path)
 
-Because nothing above needs root, `kepler-agent` should run as a dedicated,
-unprivileged system user in production — this is a deployment choice, not
-something the binary enforces on its own, so it's the operator's
-responsibility to wire up. Recommended `systemd` unit:
-[`../deploy/systemd/kepler-agent.service`](../deploy/systemd/kepler-agent.service).
+1. An operator provisions the host and gets an API key:
+   `kepler-backend-admin create-host <hostname>` (run against the
+   backend — see `backend/README.md`).
+2. Cross-compile the agent and copy it to the target host, alongside
+   `deploy/install-agent.sh` and `deploy/systemd/`:
+   ```
+   GOOS=linux GOARCH=amd64 go build -o kepler-agent ./cmd/kepler-agent
+   scp kepler-agent ../deploy/install-agent.sh -r ../deploy/systemd <host>:~/
+   ```
+3. On the target host: `sudo ./install-agent.sh <backend-url> <api-key>`.
+   This installs the binary, writes the (root-only) env file with the
+   backend URL and key, installs the systemd service and timer, and runs
+   one report immediately so you know right away whether it worked.
+
+No self-service enrollment flow yet (matches `backend/README.md`'s own
+scope note) — an operator provisions each host, same as today, just
+without the previously-manual "build a binary, copy it over, hand-write a
+unit file" steps per host.
+
+### Manual setup (what the install script automates)
+
+If you'd rather not run the script: build the binary, copy
+[`../deploy/systemd/kepler-agent.service`](../deploy/systemd/kepler-agent.service)
+and
+[`../deploy/systemd/kepler-agent.timer`](../deploy/systemd/kepler-agent.timer)
+to `/etc/systemd/system/`, write `/etc/kepler/agent.env` (mode 600) with
+`KEPLER_BACKEND_URL` and `KEPLER_API_KEY`, then
+`systemctl enable --now kepler-agent.timer`.
 
 `DynamicUser=yes` allocates a throwaway, unprivileged UID for each run with
 no shell, no home directory, and no standing account to compromise —
@@ -69,8 +110,8 @@ go build ./cmd/kepler-agent
 
 Requires a real Linux host (or VM/container with systemd active) — the
 collectors shell out to `dpkg-query` and `systemctl` and read Linux-only
-procfs paths, so this doesn't run on macOS or Windows dev machines. Cross-compiles
-cleanly from any OS for a Linux target:
+procfs paths, so this doesn't run on macOS or Windows dev machines.
+Cross-compiles cleanly from any OS for a Linux target:
 
 ```
 GOOS=linux GOARCH=amd64 go build -o kepler-agent-linux ./cmd/kepler-agent
@@ -82,6 +123,7 @@ GOOS=linux GOARCH=amd64 go build -o kepler-agent-linux ./cmd/kepler-agent
 go test ./...
 ```
 
-`matcher`'s integration test (`TestMatch_Integration`) skips cleanly if a
-Trivy vulnerability database isn't present locally — see its skip message
-for how to fetch one.
+The reporting logic (`reportToBackend`) is plain `net/http` code with no
+OS dependency, so it's tested with a fake server (`cmd/kepler-agent`'s own
+test file) — that part runs and passes on any OS, including whatever this
+is being developed on. Only collection itself needs a real Linux host.
