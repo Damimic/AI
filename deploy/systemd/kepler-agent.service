@@ -1,11 +1,22 @@
 [Unit]
 Description=Kepler vulnerability scanning agent
 Documentation=file:///usr/local/share/doc/kepler/agent-README.md
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 DynamicUser=yes
+
+# KEPLER_BACKEND_URL and KEPLER_API_KEY — read by systemd as root before
+# dropping to the dynamic user, so this file can stay root-only even
+# though the agent process itself never runs as root. Without these two
+# set, kepler-agent prints its report to stdout instead of reporting over
+# the network, which is harmless here (the timer invocation's stdout goes
+# nowhere) but means nothing gets reported — see deploy/install-agent.sh,
+# which writes this file as part of onboarding a host.
+EnvironmentFile=/etc/kepler/agent.env
+
 ProtectSystem=strict
 ProtectHome=yes
 NoNewPrivileges=yes

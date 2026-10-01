@@ -1,0 +1,19 @@
+[Unit]
+Description=Run kepler-agent on a schedule
+Documentation=file:///usr/local/share/doc/kepler/agent-README.md
+
+[Timer]
+# Every 6 hours — frequent enough that a newly-published CVE shows up
+# same-day, infrequent enough that a fleet of hosts isn't hammering the
+# backend. Revisit once there's a reason to (an SLA, a customer ask) rather
+# than guessing at a "better" number now.
+OnCalendar=*-*-* 0/6:00:00
+# Spreads actual run times across a 10-minute window so a fleet of hosts
+# provisioned around the same time doesn't all report in the same instant.
+RandomizedDelaySec=600
+# If the host was off at the scheduled time, run once shortly after boot
+# instead of waiting for the next slot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
