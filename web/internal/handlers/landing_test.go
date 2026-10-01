@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +13,21 @@ import (
 
 	"kepler/web/internal/waitlist"
 )
+
+// randomSuffix avoids email collisions between test runs, same convention
+// as every other test in this codebase — these tests don't clean up after
+// themselves (see web/internal/store/findings_test.go's own comment on
+// why), so a fixed, deterministic email would collide with a prior run's
+// leftover row in the shared test database and fail nondeterministically
+// depending on what ran before it.
+func randomSuffix(t *testing.T) string {
+	t.Helper()
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		t.Fatalf("generating random suffix: %v", err)
+	}
+	return hex.EncodeToString(buf)
+}
 
 func testWaitlistStore(t *testing.T) *waitlist.Store {
 	t.Helper()
@@ -39,7 +56,7 @@ func TestWaitlist_ValidEmail(t *testing.T) {
 	st := testWaitlistStore(t)
 	handler := Waitlist(st)
 
-	rec := postForm(t, handler, url.Values{"email": {"new-signup-" + t.Name() + "@example.com"}})
+	rec := postForm(t, handler, url.Values{"email": {"new-signup-" + randomSuffix(t) + "@example.com"}})
 
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("got status %d, want %d", rec.Code, http.StatusSeeOther)
@@ -76,7 +93,7 @@ func TestWaitlist_InvalidEmail(t *testing.T) {
 func TestWaitlist_Honeypot(t *testing.T) {
 	st := testWaitlistStore(t)
 	handler := Waitlist(st)
-	email := "bot-" + t.Name() + "@example.com"
+	email := "bot-" + randomSuffix(t) + "@example.com"
 
 	rec := postForm(t, handler, url.Values{
 		"email":           {email},
