@@ -12,13 +12,15 @@
 -- human with real credentials each time, not a standing internet-facing
 -- process, so it doesn't need the same scoping.
 --
--- Replace the CHANGEME passwords before running. Run the first block
--- while connected to `kepler`, the second while connected to
--- `kepler_marketing`.
-
--- ============================================================
--- Run while connected to: kepler
--- ============================================================
+-- Replace the CHANGEME passwords before running.
+--
+-- Run this file while connected to `kepler` (see
+-- production-roles-marketing.sql for the kepler_marketing counterpart).
+-- These are deliberately two separate files, not two "blocks" of one file
+-- split by a comment: `psql -f` runs a whole file against a single
+-- connection, and plain SQL can't reference a table in another database,
+-- so one file run twice against two databases would fail (the kepler_landing
+-- grant below targets a table that only exists in kepler_marketing).
 
 -- Postgres grants CONNECT on every new database to PUBLIC by default —
 -- revoke it so only roles explicitly granted access can connect at all,
@@ -28,6 +30,14 @@ REVOKE CONNECT ON DATABASE kepler FROM PUBLIC;
 CREATE ROLE kepler_backend LOGIN PASSWORD 'CHANGEME';
 GRANT CONNECT ON DATABASE kepler TO kepler_backend;
 GRANT SELECT ON api_keys TO kepler_backend;          -- auth lookup only
+-- UPDATE (last_seen_at) alone is not enough: the actual query is
+-- `UPDATE hosts SET last_seen_at = now() WHERE id = $1`, and Postgres
+-- requires SELECT privilege on any column referenced outside the SET list
+-- (here, `id` in the WHERE clause) even when the role already has
+-- column-scoped UPDATE on the table. Without this, every ingestion
+-- request's last_seen_at update — and so the whole transaction — fails
+-- with a permission-denied error.
+GRANT SELECT (id) ON hosts TO kepler_backend;
 GRANT UPDATE (last_seen_at) ON hosts TO kepler_backend; -- nothing else on hosts
 GRANT INSERT ON ingestions TO kepler_backend;
 GRANT INSERT ON findings TO kepler_backend;
@@ -39,17 +49,3 @@ GRANT SELECT ON findings TO kepler_dashboard;
 -- No INSERT/UPDATE/DELETE grants anywhere — the dashboard is read-only in
 -- code today; this makes it read-only at the database level too, so a
 -- bug or a compromised process can't write regardless.
-
--- ============================================================
--- Run while connected to: kepler_marketing
--- ============================================================
-
-REVOKE CONNECT ON DATABASE kepler_marketing FROM PUBLIC;
-
-CREATE ROLE kepler_landing LOGIN PASSWORD 'CHANGEME';
-GRANT CONNECT ON DATABASE kepler_marketing TO kepler_landing;
-GRANT SELECT, INSERT ON waitlist_signups TO kepler_landing;
--- kepler_landing has no grants on the kepler database at all (it can't
--- even CONNECT to it) — a compromised or abused signup form has no path
--- to findings data, enforced by Postgres, not just by which URL the code
--- happens to use.

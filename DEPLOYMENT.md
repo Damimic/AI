@@ -109,8 +109,11 @@ nothing outside this VPS ever needs to reach it directly.
 
 Create the databases, apply schemas, and create the three least-privilege
 service roles (never the databases' owning role — see
-[`deploy/db/production-roles.sql`](deploy/db/production-roles.sql) for why
-each service gets its own scoped role instead of sharing one). `kepler`
+[`deploy/db/production-roles-kepler.sql`](deploy/db/production-roles-kepler.sql)
+and
+[`deploy/db/production-roles-marketing.sql`](deploy/db/production-roles-marketing.sql)
+for why each service gets its own scoped role instead of sharing one).
+`kepler`
 here is a normal role, not a superuser — it doesn't need to be one, since
 owning a database's tables already grants full DML on them, and the
 role-creation step below runs as Postgres's own `postgres` superuser
@@ -130,11 +133,14 @@ sudo -u postgres psql -c "ALTER ROLE kepler PASSWORD 'CHANGEME'"
 psql "postgres://kepler:CHANGEME@localhost/kepler" -f backend/db/schema.sql
 psql "postgres://kepler:CHANGEME@localhost/kepler_marketing" -f web/db/waitlist_schema.sql
 
-# Edit the CHANGEME passwords inside this file first (the per-service role
+# Edit the CHANGEME passwords inside both files first (the per-service role
 # passwords, separate from kepler's own above). Run as postgres, not
-# kepler, since CREATE ROLE and REVOKE CONNECT ON DATABASE need it.
-sudo -u postgres psql -d kepler -f deploy/db/production-roles.sql            # first block
-sudo -u postgres psql -d kepler_marketing -f deploy/db/production-roles.sql  # second block
+# kepler, since CREATE ROLE and REVOKE CONNECT ON DATABASE need it. These
+# are two separate files, not one file run twice, because `psql -f` runs
+# the whole file against a single connection — a single file can't grant
+# privileges on tables that live in the other database.
+sudo -u postgres psql -d kepler -f deploy/db/production-roles-kepler.sql
+sudo -u postgres psql -d kepler_marketing -f deploy/db/production-roles-marketing.sql
 ```
 
 ## Step 4 — TLS certificates
@@ -236,7 +242,7 @@ Provision a real host and post a real finding through the real domain,
 same as the local demo but over the internet this time:
 
 ```
-KEPLER_DB_URL="postgres://kepler@localhost/kepler" /usr/local/bin/kepler-backend-admin create-host first-real-host
+KEPLER_DB_URL="postgres://kepler:CHANGEME@localhost/kepler" /usr/local/bin/kepler-backend-admin create-host first-real-host
 # then from your local machine:
 curl -X POST https://api.kepler.<your-domain>:8443/v1/findings \
   -H "Authorization: Bearer <the key just printed>" \
