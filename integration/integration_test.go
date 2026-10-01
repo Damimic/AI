@@ -52,6 +52,7 @@ type findingInput struct {
 	CVEID        string `json:"cve_id"`
 	Severity     string `json:"severity"`
 	FixedVersion string `json:"fixed_version,omitempty"`
+	Status       string `json:"status,omitempty"`
 }
 
 type ingestRequest struct {
@@ -111,8 +112,8 @@ func TestEndToEnd(t *testing.T) {
 	apiKey := createHost(t, adminBin, testDBURL, hostname)
 
 	findings := []findingInput{
-		{Package: "openssl", Version: "1.1.1", CVEID: "CVE-2023-99999", Severity: "CRITICAL", FixedVersion: "1.1.1a"},
-		{Package: "curl", Version: "7.68.0", CVEID: "CVE-2023-88888", Severity: "MEDIUM"},
+		{Package: "openssl", Version: "1.1.1", CVEID: "CVE-2023-99999", Severity: "CRITICAL", FixedVersion: "1.1.1a", Status: "fixed"},
+		{Package: "curl", Version: "7.68.0", CVEID: "CVE-2023-88888", Severity: "MEDIUM"}, // deliberately no status
 	}
 	body, err := json.Marshal(ingestRequest{Findings: findings})
 	if err != nil {
@@ -174,7 +175,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	page := string(dashBody)
-	for _, want := range []string{"openssl", "CVE-2023-99999", "CRITICAL", "curl", "CVE-2023-88888", "MEDIUM"} {
+	for _, want := range []string{"openssl", "CVE-2023-99999", "CRITICAL", "curl", "CVE-2023-88888", "MEDIUM", "fixed"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("dashboard page missing %q", want)
 		}

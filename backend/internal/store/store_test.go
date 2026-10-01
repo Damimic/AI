@@ -100,8 +100,8 @@ func TestInsertFindings(t *testing.T) {
 	}
 
 	findings := []model.FindingInput{
-		{Package: "libssl3", Version: "3.0.2-0ubuntu1.1", CVEID: "CVE-2022-3786", Severity: "HIGH", FixedVersion: "3.0.2-0ubuntu1.7"},
-		{Package: "libssl3", Version: "3.0.2-0ubuntu1.1", CVEID: "CVE-2023-0464", Severity: "LOW"}, // no fixed version
+		{Package: "libssl3", Version: "3.0.2-0ubuntu1.1", CVEID: "CVE-2022-3786", Severity: "HIGH", FixedVersion: "3.0.2-0ubuntu1.7", Status: "fixed"},
+		{Package: "libssl3", Version: "3.0.2-0ubuntu1.1", CVEID: "CVE-2023-0464", Severity: "LOW"}, // no fixed version, no status
 	}
 
 	ingestionID, err := st.InsertFindings(ctx, hostID, findings)
@@ -118,6 +118,26 @@ func TestInsertFindings(t *testing.T) {
 	}
 	if count != len(findings) {
 		t.Errorf("stored %d findings, want %d", count, len(findings))
+	}
+
+	var status *string
+	if err := st.pool.QueryRow(ctx,
+		`SELECT status FROM findings WHERE ingestion_id = $1 AND cve_id = $2`, ingestionID, "CVE-2022-3786",
+	).Scan(&status); err != nil {
+		t.Fatalf("reading status: %v", err)
+	}
+	if status == nil || *status != "fixed" {
+		t.Errorf("status = %v, want \"fixed\"", status)
+	}
+
+	var noStatus *string
+	if err := st.pool.QueryRow(ctx,
+		`SELECT status FROM findings WHERE ingestion_id = $1 AND cve_id = $2`, ingestionID, "CVE-2023-0464",
+	).Scan(&noStatus); err != nil {
+		t.Fatalf("reading empty status: %v", err)
+	}
+	if noStatus != nil {
+		t.Errorf("status = %q, want NULL for a finding with no status reported", *noStatus)
 	}
 
 	var lastSeen *time.Time

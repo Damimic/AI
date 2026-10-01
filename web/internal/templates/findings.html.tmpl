@@ -15,6 +15,9 @@
   .sev-HIGH { color: #b30000; font-weight: bold; }
   .sev-MEDIUM { color: #a86a00; }
   .sev-LOW { color: #555; }
+  .status-fixed { color: #1a7a1a; }
+  .status-will_not_fix, .status-end_of_life { color: #b30000; font-weight: bold; }
+  .status-affected, .status-under_investigation, .status-fix_deferred { color: #a86a00; }
   .empty { color: #666; font-style: italic; }
   .count { color: #666; font-size: 0.85rem; margin-bottom: 1rem; }
 </style>
@@ -47,7 +50,7 @@
 {{if .Findings}}
 <table>
   <thead>
-    <tr><th>Host</th><th>Package</th><th>Version</th><th>CVE</th><th>Severity</th><th>Fixed Version</th><th>Reported</th></tr>
+    <tr><th>Host</th><th>Package</th><th>Version</th><th>CVE</th><th>Severity</th><th>Fixed Version</th><th>Status</th><th>Reported</th></tr>
   </thead>
   <tbody>
     {{range .Findings}}
@@ -58,6 +61,7 @@
       <td><a href="https://nvd.nist.gov/vuln/detail/{{.CVEID}}" target="_blank" rel="noopener noreferrer">{{.CVEID}}</a></td>
       <td class="sev-{{.Severity}}">{{.Severity}}</td>
       <td>{{if .FixedVersion}}{{.FixedVersion}}{{else}}—{{end}}</td>
+      <td class="status-{{.Status}}">{{if .Status}}{{.Status}}{{else}}—{{end}}</td>
       <td>{{.ReportedAt.Format "2006-01-02 15:04"}}</td>
     </tr>
     {{end}}

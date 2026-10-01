@@ -15,6 +15,13 @@ type FindingInput struct {
 	CVEID        string `json:"cve_id"`
 	Severity     string `json:"severity"`
 	FixedVersion string `json:"fixed_version,omitempty"`
+
+	// Status is the distro security tracker's own fix-status classification
+	// for this CVE/package pairing (e.g. "fixed", "affected",
+	// "will_not_fix", "end_of_life") — see agent/internal/model.Finding for
+	// the full rationale. Optional and passed through verbatim; the backend
+	// doesn't validate or interpret its value.
+	Status string `json:"status,omitempty"`
 }
 
 // IngestRequest is the body of POST /v1/findings.

@@ -43,6 +43,11 @@ func randomSuffix(t *testing.T) string {
 // own API.
 func seedFinding(t *testing.T, st *Store, hostname, pkg, version, cveID, severity, fixedVersion string) {
 	t.Helper()
+	seedFindingWithStatus(t, st, hostname, pkg, version, cveID, severity, fixedVersion, "")
+}
+
+func seedFindingWithStatus(t *testing.T, st *Store, hostname, pkg, version, cveID, severity, fixedVersion, status string) {
+	t.Helper()
 	ctx := context.Background()
 
 	var hostID, ingestionID string
@@ -53,9 +58,9 @@ func seedFinding(t *testing.T, st *Store, hostname, pkg, version, cveID, severit
 		t.Fatalf("seeding ingestion: %v", err)
 	}
 	_, err := st.pool.Exec(ctx,
-		`INSERT INTO findings (ingestion_id, host_id, package, version, cve_id, severity, fixed_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))`,
-		ingestionID, hostID, pkg, version, cveID, severity, fixedVersion,
+		`INSERT INTO findings (ingestion_id, host_id, package, version, cve_id, severity, fixed_version, status)
+		 VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''))`,
+		ingestionID, hostID, pkg, version, cveID, severity, fixedVersion, status,
 	)
 	if err != nil {
 		t.Fatalf("seeding finding: %v", err)
@@ -83,6 +88,34 @@ func TestListFindings_Unfiltered(t *testing.T) {
 	}
 	if !found {
 		t.Error("seeded finding not present in unfiltered ListFindings result")
+	}
+}
+
+func TestListFindings_Status(t *testing.T) {
+	st := testStore(t)
+	hostname := "test-host-" + randomSuffix(t)
+	seedFindingWithStatus(t, st, hostname, "pkg-fixed", "1.0", "CVE-STATUS-1", "HIGH", "1.1", "fixed")
+	seedFindingWithStatus(t, st, hostname, "pkg-nostatus", "1.0", "CVE-STATUS-2", "LOW", "", "")
+
+	findings, err := st.ListFindings(context.Background(), FindingFilter{Host: hostname})
+	if err != nil {
+		t.Fatalf("ListFindings: %v", err)
+	}
+
+	var gotFixed, gotEmpty bool
+	for _, f := range findings {
+		switch f.CVEID {
+		case "CVE-STATUS-1":
+			gotFixed = f.Status == "fixed"
+		case "CVE-STATUS-2":
+			gotEmpty = f.Status == ""
+		}
+	}
+	if !gotFixed {
+		t.Error("finding with status \"fixed\" did not round-trip correctly")
+	}
+	if !gotEmpty {
+		t.Error("finding with no status should scan as empty string, not a Go zero-value surprise")
 	}
 }
 

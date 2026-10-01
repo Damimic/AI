@@ -46,6 +46,7 @@ CREATE TABLE findings (
     cve_id TEXT NOT NULL,
     severity TEXT NOT NULL,
     fixed_version TEXT,
+    status TEXT, -- distro tracker's fix status: fixed/affected/will_not_fix/end_of_life/etc; optional, passed through as-is from kepler-matcher
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

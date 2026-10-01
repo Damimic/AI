@@ -28,9 +28,9 @@ func (s *Store) InsertFindings(ctx context.Context, hostID uuid.UUID, findings [
 	batch := &pgx.Batch{}
 	for _, f := range findings {
 		batch.Queue(
-			`INSERT INTO findings (ingestion_id, host_id, package, version, cve_id, severity, fixed_version)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-			ingestionID, hostID, f.Package, f.Version, f.CVEID, f.Severity, nullIfEmpty(f.FixedVersion),
+			`INSERT INTO findings (ingestion_id, host_id, package, version, cve_id, severity, fixed_version, status)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			ingestionID, hostID, f.Package, f.Version, f.CVEID, f.Severity, nullIfEmpty(f.FixedVersion), nullIfEmpty(f.Status),
 		)
 	}
 	br := tx.SendBatch(ctx, batch)

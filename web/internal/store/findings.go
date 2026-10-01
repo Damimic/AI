@@ -19,7 +19,7 @@ type FindingFilter struct {
 func (s *Store) ListFindings(ctx context.Context, filter FindingFilter) ([]model.Finding, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT h.hostname, f.package, f.version, f.cve_id, f.severity,
-		       coalesce(f.fixed_version, ''), f.created_at
+		       coalesce(f.fixed_version, ''), coalesce(f.status, ''), f.created_at
 		FROM findings f
 		JOIN hosts h ON h.id = f.host_id
 		WHERE ($1 = '' OR h.hostname = $1)
@@ -42,7 +42,7 @@ func (s *Store) ListFindings(ctx context.Context, filter FindingFilter) ([]model
 	var findings []model.Finding
 	for rows.Next() {
 		var f model.Finding
-		if err := rows.Scan(&f.Host, &f.Package, &f.Version, &f.CVEID, &f.Severity, &f.FixedVersion, &f.ReportedAt); err != nil {
+		if err := rows.Scan(&f.Host, &f.Package, &f.Version, &f.CVEID, &f.Severity, &f.FixedVersion, &f.Status, &f.ReportedAt); err != nil {
 			return nil, err
 		}
 		findings = append(findings, f)

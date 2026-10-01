@@ -14,5 +14,10 @@ type Finding struct {
 	CVEID        string
 	Severity     string
 	FixedVersion string
-	ReportedAt   time.Time
+	// Status is the distro tracker's own fix-status classification
+	// ("fixed", "affected", "will_not_fix", "end_of_life", ...) — may be
+	// empty for findings reported before this field existed. See
+	// agent/internal/model.Finding for the full rationale.
+	Status     string
+	ReportedAt time.Time
 }

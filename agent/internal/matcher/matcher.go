@@ -73,6 +73,7 @@ func Match(ctx context.Context, host model.HostInfo, packages []model.Package) (
 			CVEID:        d.VulnerabilityID,
 			Severity:     d.Severity,
 			FixedVersion: d.FixedVersion,
+			Status:       d.Status.String(),
 		})
 	}
 	return findings, nil
