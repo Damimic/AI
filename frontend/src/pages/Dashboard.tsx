@@ -1,5 +1,5 @@
 import { ExternalLink, LogOut, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchFindings, UnauthorizedError, type Finding } from "../lib/api";
 import { clearCredentials } from "../lib/auth";
@@ -9,24 +9,51 @@ import { Select } from "../components/ui/Input";
 
 const SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 
+interface FetchState {
+  loading: boolean;
+  error: string | null;
+  findings: Finding[];
+  hostnames: string[];
+}
+
+type FetchAction =
+  | { type: "started" }
+  | { type: "succeeded"; findings: Finding[]; hostnames: string[] }
+  | { type: "failed"; message: string };
+
+// A single dispatch per transition, not several setState calls in a row —
+// each fetch's start/success/failure is one atomic state change, not three
+// independently-settable fields that could briefly disagree with each
+// other (e.g. "not loading" with stale findings from the previous filter).
+function fetchReducer(state: FetchState, action: FetchAction): FetchState {
+  switch (action.type) {
+    case "started":
+      return { ...state, loading: true, error: null };
+    case "succeeded":
+      return { loading: false, error: null, findings: action.findings, hostnames: action.hostnames };
+    case "failed":
+      return { ...state, loading: false, error: action.message };
+  }
+}
+
 export function Dashboard() {
   const navigate = useNavigate();
-  const [findings, setFindings] = useState<Finding[]>([]);
-  const [hostnames, setHostnames] = useState<string[]>([]);
   const [host, setHost] = useState("");
   const [severity, setSeverity] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [{ loading, error, findings, hostnames }, dispatch] = useReducer(fetchReducer, {
+    loading: true,
+    error: null,
+    findings: [],
+    hostnames: [],
+  });
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    dispatch({ type: "started" });
     fetchFindings({ host, severity })
       .then((res) => {
         if (cancelled) return;
-        setFindings(res.findings);
-        setHostnames(res.hostnames);
+        dispatch({ type: "succeeded", findings: res.findings, hostnames: res.hostnames });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -34,9 +61,8 @@ export function Dashboard() {
           navigate("/login");
           return;
         }
-        setError("Couldn't load findings — check the backend is running.");
-      })
-      .finally(() => !cancelled && setLoading(false));
+        dispatch({ type: "failed", message: "Couldn't load findings — check the backend is running." });
+      });
     return () => {
       cancelled = true;
     };

@@ -42,7 +42,21 @@ func run() error {
 	}
 	defer st.Close()
 
-	handler := api.NewLandingServer(st)
+	// Both optional: with neither set, this serves the plain
+	// html/template landing page exactly as it always has. Set
+	// KEPLER_FRONTEND_DIST_DIR to serve the built frontend/ SPA instead
+	// (see frontend/README.md for the build step), and
+	// KEPLER_DASHBOARD_API_URL alongside it so the SPA's /api/* calls
+	// reach kepler-web — see web/README.md for why this proxy exists
+	// instead of browser-side CORS.
+	handler, err := api.NewLandingServer(st, api.LandingOptions{
+		FrontendDistDir:    os.Getenv("KEPLER_FRONTEND_DIST_DIR"),
+		DashboardAPIURL:    os.Getenv("KEPLER_DASHBOARD_API_URL"),
+		InsecureSkipVerify: os.Getenv("KEPLER_INSECURE_SKIP_VERIFY") == "true",
+	})
+	if err != nil {
+		return err
+	}
 
 	addr := os.Getenv("KEPLER_LISTEN_ADDR")
 	if addr == "" {

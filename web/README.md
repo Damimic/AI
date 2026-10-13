@@ -4,10 +4,14 @@ Two independent services:
 
 - The **findings dashboard** (`kepler-web`) — a single Basic-Auth-protected
   page listing findings, filterable by host and severity. Read-only — all
-  writes happen through `backend`'s ingestion API.
+  writes happen through `backend`'s ingestion API. Also exposes
+  `GET /api/findings` (same auth, same data, as JSON) for the `frontend/`
+  SPA.
 - The **marketing site** (`kepler-landing`) — a public landing page with a
   waitlist signup form. No auth (it's meant to be public), and its own
-  database, separate from the findings database.
+  database, separate from the findings database. Can also serve the
+  `frontend/` SPA and proxy its `/api/*` calls to `kepler-web` — see
+  "Serving the frontend SPA" below.
 
 They don't share a database or a store package on purpose — a compromised
 or abused public signup form should have no path to customer vulnerability
@@ -87,6 +91,27 @@ Needs findings in the database already (see `backend/README.md`).
    go run ./cmd/kepler-landing
    ```
 3. Visit `https://localhost:8445/`.
+
+## Serving the frontend SPA
+
+Both commands above still serve the original plain HTML (the
+`html/template` dashboard and landing pages) — nothing changes there by
+default. The `frontend/` SPA is opt-in, via two more env vars on
+`kepler-landing`:
+
+```
+KEPLER_FRONTEND_DIST_DIR=../frontend/dist \
+KEPLER_DASHBOARD_API_URL=https://localhost:8444 \
+KEPLER_INSECURE_SKIP_VERIFY=true \  # only with a self-signed dev cert on kepler-web
+... (same KEPLER_MARKETING_DB_URL / KEPLER_TLS_CERT / KEPLER_TLS_KEY as above) \
+go run ./cmd/kepler-landing
+```
+
+Build the frontend first: `cd ../frontend && npm run build`. See
+`ARCHITECTURE.md`'s "Serving the frontend" for why `kepler-landing` (not
+`kepler-web`) is the one that serves it, and `frontend/README.md` for
+frontend-specific development (its own dev server, `npm run dev`, proxies
+to these same two backends without needing this env var setup at all).
 
 ## Tests
 

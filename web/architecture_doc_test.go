@@ -23,8 +23,8 @@ import (
 func TestArchitectureDoc_Web(t *testing.T) {
 	// internal/api — NewServer, NewLandingServer.
 	var (
-		_ func(*store.Store, string, string) http.Handler = api.NewServer
-		_ func(*waitlist.Store) http.Handler              = api.NewLandingServer
+		_ func(*store.Store, string, string) http.Handler                 = api.NewServer
+		_ func(*waitlist.Store, api.LandingOptions) (http.Handler, error) = api.NewLandingServer
 	)
 
 	// internal/auth — RequireBasicAuth.
@@ -44,9 +44,10 @@ func TestArchitectureDoc_Web(t *testing.T) {
 	_ = func() { _ = wst.Signup(context.Background(), "") }
 	_ = waitlist.ErrAlreadySignedUp
 
-	// internal/handlers — Findings, Waitlist, Landing.
+	// internal/handlers — Findings, FindingsAPI, Waitlist, Landing.
 	var (
 		_ func(*store.Store) http.HandlerFunc    = handlers.Findings
+		_ func(*store.Store) http.HandlerFunc    = handlers.FindingsAPI
 		_ func(*waitlist.Store) http.HandlerFunc = handlers.Waitlist
 		_ func() http.HandlerFunc                = handlers.Landing
 	)

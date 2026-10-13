@@ -166,7 +166,7 @@ sudo cp deploy/certbot-renew-hook.sh /etc/letsencrypt/renewal-hooks/deploy/keple
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/kepler-restart.sh
 ```
 
-## Step 5 — Build and ship the binaries
+## Step 5 — Build and ship the binaries (and the frontend)
 
 From your local machine (no Go install needed on the VPS):
 
@@ -183,6 +183,21 @@ On the VPS:
 sudo mv /tmp/kepler-backend /tmp/kepler-backend-admin /tmp/kepler-web /tmp/kepler-web-admin /tmp/kepler-landing /usr/local/bin/
 sudo chmod +x /usr/local/bin/kepler-*
 ```
+
+The frontend builds separately (Node, not Go) and ships as a plain
+directory of static files, not a binary:
+
+```
+cd frontend && npm install && npm run build && cd ..
+scp -r frontend/dist kepler-ops@<vps-ip>:/tmp/kepler-frontend-dist
+# on the VPS:
+sudo mkdir -p /var/lib/kepler/frontend
+sudo cp -r /tmp/kepler-frontend-dist/* /var/lib/kepler/frontend/
+```
+
+Optional — `kepler-landing` serves the plain `html/template` landing page
+perfectly well without this step. Do it if you want the real frontend
+live; see Step 6's `landing.env` for the two variables that turn it on.
 
 ## Step 6 — Configure and install the systemd units
 
@@ -207,10 +222,22 @@ EOF
 sudo tee /etc/kepler/landing.env <<'EOF'
 KEPLER_MARKETING_DB_URL=postgres://kepler_landing:CHANGEME@localhost:5432/kepler_marketing
 KEPLER_LISTEN_ADDR=:8445
+# Uncomment to serve the real frontend (Step 5) instead of the plain
+# html/template landing page. KEPLER_DASHBOARD_API_URL is the dashboard's
+# own address (api.kepler.<your-domain>:8443 is the ingestion API, not
+# this — the frontend's /api/findings calls go to the dashboard).
+#KEPLER_FRONTEND_DIST_DIR=/var/lib/kepler/frontend
+#KEPLER_DASHBOARD_API_URL=https://dashboard.kepler.<your-domain>:8444
 EOF
 
 sudo chmod 600 /etc/kepler/*.env
 ```
+
+If you uncomment those two lines, `kepler-landing.service`'s
+`ProtectSystem=strict` needs a carve-out to actually read the frontend's
+static files — add `ReadOnlyPaths=/var/lib/kepler/frontend` to the unit
+(same reasoning as Step 7's trivy-db note: read-only is correct, the
+service only ever reads these files).
 
 Generate the real dashboard password hash first (run locally or on the
 VPS, doesn't matter — it never touches the network):

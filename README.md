@@ -21,6 +21,10 @@ dashboard with severity scoring and alerting.
   host/severity) and the marketing/waitlist landing page. Two independent
   services with separate databases — a compromised public signup form has
   no path to findings data.
+- [`frontend/`](frontend/) — the dashboard and landing page as a real UI
+  (React/TypeScript/Vite), on top of the same two Go services above —
+  see [ARCHITECTURE.md](ARCHITECTURE.md)'s "Serving the frontend" for how
+  a public SPA and an authenticated dashboard coexist in one build.
 - [`integration/`](integration/) — one end-to-end test that drives the real
   `kepler-backend` and `kepler-web` binaries as subprocesses over real
   HTTPS: ingests a findings payload with a real API key, then confirms it
