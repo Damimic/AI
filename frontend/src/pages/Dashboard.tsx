@@ -3,6 +3,7 @@ import { useEffect, useReducer, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchFindings, UnauthorizedError, type Finding } from "../lib/api";
 import { clearCredentials } from "../lib/auth";
+import { ChatWidget } from "../components/ChatWidget";
 import { SeverityBadge, StatusBadge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Select } from "../components/ui/Input";
@@ -203,6 +204,8 @@ export function Dashboard() {
           </table>
         </div>
       </main>
+
+      <ChatWidget findings={findings} hostnames={hostnames} />
     </div>
   );
 }

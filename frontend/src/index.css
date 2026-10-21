@@ -28,6 +28,37 @@
   color-scheme: light dark;
 }
 
+/* Three distinct animations, one per blob — each keyframe's base position
+   must match that blob's own static Tailwind translate, or sharing a
+   class across differently-positioned blobs snaps them to the wrong
+   spot. */
+@keyframes aurora-drift-a {
+  0%, 100% { transform: translate(-60%, -33%) scale(1); }
+  50% { transform: translate(-55%, -28%) scale(1.08); }
+}
+@keyframes aurora-drift-b {
+  0%, 100% { transform: translate(-20%, 0%) scale(1); }
+  50% { transform: translate(-25%, 5%) scale(1.05); }
+}
+@keyframes aurora-drift-c {
+  0%, 100% { transform: translate(10%, 0%) scale(1); }
+  50% { transform: translate(14%, -4%) scale(1.06); }
+}
+.animate-aurora-a {
+  animation: aurora-drift-a 14s ease-in-out infinite;
+}
+.animate-aurora-b {
+  animation: aurora-drift-b 18s ease-in-out infinite;
+}
+.animate-aurora-c {
+  animation: aurora-drift-c 16s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora-a, .animate-aurora-b, .animate-aurora-c {
+    animation: none;
+  }
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
